@@ -150,6 +150,7 @@ export const getTripData = cache(async () => {
     //    類別來源：properties.journey (取代原本的 properties.category)
     const itinerary: ItineraryItem[] = results
         .filter(r => r.properties.type?.select?.name === 'journey')
+        .filter(r => r.properties.date?.date?.start) // skip items without dates
         .map(page => {
             let coverUrl = null;
             if (page.cover) {

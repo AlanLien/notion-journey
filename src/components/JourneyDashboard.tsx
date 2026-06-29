@@ -60,8 +60,8 @@ export default function JourneyDashboard({ data, requiredPassword }: JourneyDash
     const groupedJourneys = useMemo(() => {
         const groups: Record<string, ItineraryItem[]> = {};
         sortedJourneys.forEach(item => {
-            // Use the notion-parsed date string YYYY-MM-DD key
             const { date } = parseNotionDateTime(item.date);
+            if (!date) return; // skip items without valid dates
             if (!groups[date]) groups[date] = [];
             groups[date].push(item);
         });
