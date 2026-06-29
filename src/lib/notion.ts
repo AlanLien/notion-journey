@@ -212,16 +212,12 @@ export const getPasswordConfig = cache(async () => {
         // @ts-ignore
         const response = await notion.dataSources.query({
             data_source_id: dataSourceId,
-            filter: {
-                property: "type",
-                select: {
-                    equals: "config"
-                }
-            }
         });
 
         const results = response.results as any[];
-        const passwordRow = results.find(r => r.properties.config?.select?.name === 'password');
+        const passwordRow = results
+            .filter(r => r.properties.type?.select?.name === 'config')
+            .find(r => r.properties.config?.select?.name === 'password');
 
         return passwordRow?.properties.title?.title[0]?.plain_text || null;
     } catch (e) {
