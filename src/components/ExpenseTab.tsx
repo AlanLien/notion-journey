@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { format, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { Plus, X, Wallet, TrendingUp, Receipt, Utensils, ShoppingBag, MapPin, Plane, HelpCircle } from 'lucide-react';
@@ -150,15 +151,16 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency, isAu
                 </div>
             )}
 
-            {/* FAB (auth only) */}
-            {isAuthenticated && (
+            {/* FAB (auth only) - portal to escape motion.div transform */}
+            {isAuthenticated && createPortal(
                 <button
                     onClick={() => setShowAddForm(true)}
                     className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-amber-500 text-white shadow-xl shadow-amber-300/60 flex items-center justify-center active:scale-95 transition-all hover:bg-amber-600"
                     aria-label="新增記帳"
                 >
                     <Plus size={28} strokeWidth={2.5} />
-                </button>
+                </button>,
+                document.body
             )}
 
             {/* Add Expense Modal */}

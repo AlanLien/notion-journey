@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useOptimistic, useTransition, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { format, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { CheckSquare, Square, Plus, X, Calendar } from 'lucide-react';
@@ -105,15 +106,16 @@ export const TasksTab: React.FC<TasksTabProps> = ({ tasks, isAuthenticated }) =>
                 </div>
             )}
 
-            {/* Add Task FAB (auth only) */}
-            {isAuthenticated && (
+            {/* Add Task FAB (auth only) - portal to escape motion.div transform */}
+            {isAuthenticated && createPortal(
                 <button
                     onClick={() => setShowAddForm(true)}
                     className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-violet-600 text-white shadow-xl shadow-violet-300/60 flex items-center justify-center active:scale-95 transition-all hover:bg-violet-700"
                     aria-label="新增任務"
                 >
                     <Plus size={28} strokeWidth={2.5} />
-                </button>
+                </button>,
+                document.body
             )}
 
             {/* Add Task Modal */}
