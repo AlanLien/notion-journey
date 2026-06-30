@@ -157,9 +157,10 @@ export const getTripData = cache(async () => {
         }
     }
 
-    // 2. 行程：找出 Type = 'journey' 的項目
+    // 2. 行程：找出 Type = 'journey' 的項目，排除 mission（任務）
     const itinerary: ItineraryItem[] = results
         .filter(r => r.properties.type?.select?.name === 'journey')
+        .filter(r => r.properties.journey?.select?.name !== 'mission')
         .filter(r => r.properties.date?.date?.start)
         .map(page => {
             let coverUrl = null;
@@ -203,9 +204,9 @@ export const getTripData = cache(async () => {
         })
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // 3. 任務：找出 Type = 'task' 的項目
+    // 3. 任務：找出 type='journey' 且 journey='mission' 的項目
     const tasks: TaskItem[] = results
-        .filter(r => r.properties.type?.select?.name === 'task')
+        .filter(r => r.properties.type?.select?.name === 'journey' && r.properties.journey?.select?.name === 'mission')
         .map(page => ({
             id: page.id,
             title: page.properties.title?.title[0]?.plain_text || '未命名任務',
@@ -343,7 +344,8 @@ export async function createTask(data: CreateTaskData) {
         parent: { database_id: databaseId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
-            type: { select: { name: 'task' } },
+            type: { select: { name: 'journey' } },
+            journey: { select: { name: 'mission' } },
             done: { checkbox: false },
             ...(data.date && {
                 date: { date: { start: data.date } },
