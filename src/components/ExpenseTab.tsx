@@ -23,6 +23,8 @@ function getCategoryInfo(value: string) {
     return EXPENSE_CATEGORIES.find(c => c.value === value) || EXPENSE_CATEGORIES[5];
 }
 
+// ─── Sub-components defined OUTSIDE to avoid remount on every render ───────────
+
 function AddExpenseSubmitButton() {
     const { pending } = useFormStatus();
     return (
@@ -33,87 +35,18 @@ function AddExpenseSubmitButton() {
     );
 }
 
-interface ExpenseTabProps {
-    expenses: ExpenseItem[];
-    currency: string;     // foreign currency code, e.g. 'CHF'
-    isAuthenticated: boolean;
+interface CurrencyToggleProps {
+    displayCurrency: string;
+    foreignCurrency: string;
+    rateLoading: boolean;
+    onToggle: () => void;
 }
 
-export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: foreignCurrency, isAuthenticated }) => {
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [state, formAction] = useFormState(createExpenseAction, null);
-
-    // Display toggle: 'TWD' or foreignCurrency
-    const [displayCurrency, setDisplayCurrency] = useState<string>(foreignCurrency);
-
-    // Exchange rate: 1 TWD = twdRate [foreignCurrency]  →  1 [foreignCurrency] = 1/twdRate TWD
-    const [twdRate, setTwdRate] = useState<number | null>(null);
-    const [rateLoading, setRateLoading] = useState(false);
-
-    // Form currency selection (TWD or foreignCurrency)
-    const [formCurrency, setFormCurrency] = useState<string>(foreignCurrency);
-
-    useEffect(() => {
-        if (state?.success) setShowAddForm(false);
-    }, [state]);
-
-    // Fetch exchange rate
-    useEffect(() => {
-        if (!foreignCurrency || foreignCurrency.length !== 3) return;
-        setRateLoading(true);
-        fetch(`https://open.er-api.com/v6/latest/TWD`)
-            .then(r => r.json())
-            .then(data => {
-                const rate = data.rates?.[foreignCurrency.toUpperCase()];
-                if (rate) setTwdRate(rate); // 1 TWD = rate CHF
-            })
-            .catch(console.error)
-            .finally(() => setRateLoading(false));
-    }, [foreignCurrency]);
-
-    // Convert amount from itemCurrency to displayCurrency
-    const convert = (amount: number, itemCurrency: string): number => {
-        if (itemCurrency === displayCurrency) return amount;
-        if (!twdRate) return amount; // no rate yet, show as-is
-        if (displayCurrency === 'TWD') {
-            // converting foreignCurrency → TWD: amount / twdRate
-            return amount / twdRate;
-        } else {
-            // converting TWD → foreignCurrency: amount * twdRate
-            return amount * twdRate;
-        }
-    };
-
-    const fmtAmt = (n: number) => {
-        if (displayCurrency === 'TWD') {
-            return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
-        }
-        return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-    };
-
-    const total = expenses.reduce((sum, e) => sum + convert(e.amount, e.currency), 0);
-
-    // Group by date
-    const grouped = expenses.reduce((acc, item) => {
-        const date = item.date.slice(0, 10);
-        if (!acc[date]) acc[date] = [];
-        acc[date].push(item);
-        return acc;
-    }, {} as Record<string, ExpenseItem[]>);
-    const groupDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-
-    // Category totals (in display currency)
-    const categoryTotals = expenses.reduce((acc, e) => {
-        const cat = e.category;
-        acc[cat] = (acc[cat] || 0) + convert(e.amount, e.currency);
-        return acc;
-    }, {} as Record<string, number>);
-    const topCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a).slice(0, 3);
-
-    // Currency toggle button
-    const CurrencyToggle = () => (
+function CurrencyToggle({ displayCurrency, foreignCurrency, rateLoading, onToggle }: CurrencyToggleProps) {
+    return (
         <button
-            onClick={() => setDisplayCurrency(prev => prev === 'TWD' ? foreignCurrency : 'TWD')}
+            type="button"
+            onClick={onToggle}
             className="flex items-center gap-1.5 bg-white/25 hover:bg-white/35 rounded-xl px-3 py-1.5 transition-all active:scale-95"
         >
             {rateLoading
@@ -125,6 +58,205 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
             </span>
         </button>
     );
+}
+
+interface AddExpenseModalProps {
+    open: boolean;
+    onClose: () => void;
+    formAction: (payload: FormData) => void;
+    errorMessage?: string | null;
+    foreignCurrency: string;
+    twdRate: number | null;
+    formCurrency: string;
+    onFormCurrencyChange: (c: string) => void;
+}
+
+function AddExpenseModal({
+    open, onClose, formAction, errorMessage, foreignCurrency, twdRate, formCurrency, onFormCurrencyChange
+}: AddExpenseModalProps) {
+    if (!open) return null;
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className="w-full max-w-[768px] bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-center pt-3 pb-1">
+                    <div className="w-10 h-1 rounded-full bg-slate-200" />
+                </div>
+                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+                    <h2 className="text-lg font-bold text-slate-800">新增記帳</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <form action={formAction} className="px-5 py-4 space-y-4 pb-8">
+                    {errorMessage && (
+                        <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-xl">{errorMessage}</p>
+                    )}
+
+                    {/* Currency Selector */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">支付幣別</label>
+                        <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                            {[foreignCurrency, 'TWD'].map(cur => (
+                                <button
+                                    key={cur}
+                                    type="button"
+                                    onClick={() => onFormCurrencyChange(cur)}
+                                    className={cn(
+                                        "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
+                                        formCurrency === cur
+                                            ? "bg-white text-amber-600 shadow-sm"
+                                            : "text-slate-500 hover:text-slate-700"
+                                    )}
+                                >
+                                    {cur === 'TWD' ? '🇹🇼 TWD' : `💱 ${cur}`}
+                                </button>
+                            ))}
+                        </div>
+                        <input type="hidden" name="currency" value={formCurrency} />
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">消費名稱</label>
+                        <input name="title" type="text" placeholder="例：午餐" required autoFocus
+                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
+                    </div>
+
+                    {/* Amount */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                            金額（{formCurrency}）
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                                {formCurrency === 'TWD' ? 'NT$' : formCurrency}
+                            </span>
+                            <input name="amount" type="number" inputMode="decimal" placeholder="0" min="0" step="any" required
+                                className="w-full pl-14 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
+                        </div>
+                        {twdRate && (
+                            <p className="text-xs text-slate-400 mt-1.5 ml-1">
+                                {formCurrency !== 'TWD'
+                                    ? `1 ${foreignCurrency} ≈ ${(1 / twdRate).toFixed(2)} TWD`
+                                    : `1 TWD ≈ ${twdRate.toFixed(4)} ${foreignCurrency}`
+                                }
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Date */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">日期</label>
+                        <input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required
+                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">分類</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {EXPENSE_CATEGORIES.map((cat) => (
+                                <label key={cat.value} className="cursor-pointer">
+                                    <input type="radio" name="category" value={cat.value} defaultChecked={cat.value === 'restaurant'} className="sr-only peer" />
+                                    <div className="peer-checked:bg-amber-50 peer-checked:border-amber-400 peer-checked:text-amber-700 border border-slate-200 rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-slate-500 transition-all">
+                                        <span className="text-xl">{cat.emoji}</span>
+                                        <span className="text-xs font-medium">{cat.label}</span>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">備註 <span className="font-normal text-slate-400">（選填）</span></label>
+                        <input name="description" type="text" placeholder="補充說明..."
+                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
+                    </div>
+
+                    <AddExpenseSubmitButton />
+                </form>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+interface ExpenseTabProps {
+    expenses: ExpenseItem[];
+    currency: string;
+    isAuthenticated: boolean;
+}
+
+export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: foreignCurrency, isAuthenticated }) => {
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [state, formAction] = useFormState(createExpenseAction, null);
+    const [displayCurrency, setDisplayCurrency] = useState<string>(foreignCurrency);
+    const [twdRate, setTwdRate] = useState<number | null>(null);
+    const [rateLoading, setRateLoading] = useState(false);
+    const [formCurrency, setFormCurrency] = useState<string>(foreignCurrency);
+
+    useEffect(() => {
+        if (state?.success) setShowAddForm(false);
+    }, [state]);
+
+    useEffect(() => {
+        if (!foreignCurrency || foreignCurrency.length !== 3) return;
+        setRateLoading(true);
+        fetch(`https://open.er-api.com/v6/latest/TWD`)
+            .then(r => r.json())
+            .then(data => {
+                const rate = data.rates?.[foreignCurrency.toUpperCase()];
+                if (rate) setTwdRate(rate);
+            })
+            .catch(console.error)
+            .finally(() => setRateLoading(false));
+    }, [foreignCurrency]);
+
+    const handleToggleCurrency = () => {
+        setDisplayCurrency(prev => prev === 'TWD' ? foreignCurrency : 'TWD');
+    };
+
+    const convert = (amount: number, itemCurrency: string): number => {
+        if (itemCurrency === displayCurrency) return amount;
+        if (!twdRate) return amount;
+        if (displayCurrency === 'TWD') return amount / twdRate;
+        return amount * twdRate;
+    };
+
+    const fmtAmt = (n: number) => {
+        if (displayCurrency === 'TWD') {
+            return n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+        }
+        return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
+    const total = expenses.reduce((sum, e) => sum + convert(e.amount, e.currency), 0);
+
+    const grouped = expenses.reduce((acc, item) => {
+        const date = item.date.slice(0, 10);
+        if (!acc[date]) acc[date] = [];
+        acc[date].push(item);
+        return acc;
+    }, {} as Record<string, ExpenseItem[]>);
+    const groupDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+    const categoryTotals = expenses.reduce((acc, e) => {
+        acc[e.category] = (acc[e.category] || 0) + convert(e.amount, e.currency);
+        return acc;
+    }, {} as Record<string, number>);
+    const topCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a).slice(0, 3);
 
     return (
         <div className="pb-32 pt-4 px-4 relative min-h-full">
@@ -132,15 +264,17 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
             <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-3xl p-5 mb-5 text-white shadow-lg shadow-amber-200">
                 <div className="flex items-center justify-between mb-1">
                     <p className="text-sm font-medium opacity-80">旅程總花費</p>
-                    <CurrencyToggle />
+                    <CurrencyToggle
+                        displayCurrency={displayCurrency}
+                        foreignCurrency={foreignCurrency}
+                        rateLoading={rateLoading}
+                        onToggle={handleToggleCurrency}
+                    />
                 </div>
                 <p className="text-4xl font-bold tracking-tight">
                     {fmtAmt(total)}
                     <span className="text-lg font-medium opacity-70 ml-2">{displayCurrency}</span>
                 </p>
-                {!twdRate && !rateLoading && (
-                    <p className="text-xs opacity-50 mt-1">匯率載入中...</p>
-                )}
                 {twdRate && (
                     <p className="text-xs opacity-50 mt-1">
                         1 {foreignCurrency} ≈ {(1 / twdRate).toFixed(2)} TWD
@@ -186,7 +320,6 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                                         {fmtAmt(dayTotal)} {displayCurrency}
                                     </span>
                                 </div>
-
                                 <div className="space-y-2">
                                     {dayItems.map(item => {
                                         const catInfo = getCategoryInfo(item.category);
@@ -199,18 +332,15 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-semibold text-slate-800 truncate">{item.title}</p>
-                                                    {/* Show original if converted */}
                                                     <p className="text-xs text-slate-400 mt-0.5">
                                                         {isConverted
-                                                            ? `原始 ${fmtAmt(item.amount)} ${item.currency}`
+                                                            ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
                                                             : item.description || ''
                                                         }
                                                     </p>
                                                 </div>
                                                 <div className="text-right shrink-0">
-                                                    <p className="text-base font-bold text-slate-800">
-                                                        {fmtAmt(displayAmount)}
-                                                    </p>
+                                                    <p className="text-base font-bold text-slate-800">{fmtAmt(displayAmount)}</p>
                                                     <p className="text-[10px] text-slate-400">{displayCurrency}</p>
                                                 </div>
                                             </div>
@@ -223,9 +353,10 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                 </div>
             )}
 
-            {/* FAB */}
+            {/* FAB - portal to escape motion.div transform */}
             {isAuthenticated && createPortal(
                 <button
+                    type="button"
                     onClick={() => setShowAddForm(true)}
                     className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-full bg-amber-500 text-white shadow-xl shadow-amber-300/60 flex items-center justify-center active:scale-95 transition-all hover:bg-amber-600"
                     aria-label="新增記帳"
@@ -235,116 +366,17 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                 document.body
             )}
 
-            {/* Add Expense Modal */}
-            {showAddForm && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-end justify-center"
-                    onClick={(e) => { if (e.target === e.currentTarget) setShowAddForm(false); }}
-                >
-                    <div className="w-full max-w-[768px] bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-center pt-3 pb-1">
-                            <div className="w-10 h-1 rounded-full bg-slate-200" />
-                        </div>
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                            <h2 className="text-lg font-bold text-slate-800">新增記帳</h2>
-                            <button onClick={() => setShowAddForm(false)} className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form action={formAction} className="px-5 py-4 space-y-4 pb-8">
-                            {state?.message && (
-                                <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-xl">{state.message}</p>
-                            )}
-
-                            {/* Currency Selector */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">支付幣別</label>
-                                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
-                                    {[foreignCurrency, 'TWD'].map(cur => (
-                                        <button
-                                            key={cur}
-                                            type="button"
-                                            onClick={() => setFormCurrency(cur)}
-                                            className={cn(
-                                                "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                                                formCurrency === cur
-                                                    ? "bg-white text-amber-600 shadow-sm"
-                                                    : "text-slate-500 hover:text-slate-700"
-                                            )}
-                                        >
-                                            {cur === 'TWD' ? '🇹🇼 TWD' : `💱 ${cur}`}
-                                        </button>
-                                    ))}
-                                </div>
-                                {/* Hidden input to submit currency */}
-                                <input type="hidden" name="currency" value={formCurrency} />
-                            </div>
-
-                            {/* Title */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">消費名稱</label>
-                                <input name="title" type="text" placeholder="例：午餐" required autoFocus
-                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
-                            </div>
-
-                            {/* Amount */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                                    金額（{formCurrency}）
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
-                                        {formCurrency === 'TWD' ? 'NT$' : formCurrency}
-                                    </span>
-                                    <input name="amount" type="number" inputMode="decimal" placeholder="0" min="0" step="any" required
-                                        className="w-full pl-14 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
-                                </div>
-                                {twdRate && (
-                                    <p className="text-xs text-slate-400 mt-1.5 ml-1">
-                                        {formCurrency === 'TWD'
-                                            ? `≈ ? ${foreignCurrency}（輸入後換算）`
-                                            : `1 ${foreignCurrency} ≈ ${(1 / twdRate).toFixed(2)} TWD`
-                                        }
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Date */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">日期</label>
-                                <input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required
-                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
-                            </div>
-
-                            {/* Category */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">分類</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {EXPENSE_CATEGORIES.map((cat) => (
-                                        <label key={cat.value} className="cursor-pointer">
-                                            <input type="radio" name="category" value={cat.value} defaultChecked={cat.value === 'restaurant'} className="sr-only peer" />
-                                            <div className="peer-checked:bg-amber-50 peer-checked:border-amber-400 peer-checked:text-amber-700 border border-slate-200 rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-slate-500 transition-all">
-                                                <span className="text-xl">{cat.emoji}</span>
-                                                <span className="text-xs font-medium">{cat.label}</span>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Description */}
-                            <div>
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">備註 <span className="font-normal text-slate-400">（選填）</span></label>
-                                <input name="description" type="text" placeholder="補充說明..."
-                                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-base" />
-                            </div>
-
-                            <AddExpenseSubmitButton />
-                        </form>
-                    </div>
-                </div>
-            )}
+            {/* Modal - also portal to escape motion.div transform */}
+            <AddExpenseModal
+                open={showAddForm}
+                onClose={() => setShowAddForm(false)}
+                formAction={formAction}
+                errorMessage={state?.message}
+                foreignCurrency={foreignCurrency}
+                twdRate={twdRate}
+                formCurrency={formCurrency}
+                onFormCurrencyChange={setFormCurrency}
+            />
         </div>
     );
 };
