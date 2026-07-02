@@ -111,6 +111,7 @@ export async function createExpenseAction(prevState: any, formData: FormData) {
     const amountStr = formData.get('amount') as string;
     const category = formData.get('category') as string;
     const description = formData.get('description') as string;
+    const currency = (formData.get('currency') as string) || 'TWD';
 
     if (!title?.trim()) return { success: false, message: '請輸入消費名稱' };
     if (!date) return { success: false, message: '請選擇日期' };
@@ -118,7 +119,7 @@ export async function createExpenseAction(prevState: any, formData: FormData) {
     if (isNaN(amount) || amount <= 0) return { success: false, message: '請輸入有效金額' };
 
     try {
-        await createExpense({ title: title.trim(), date, amount, category: category || 'other', description });
+        await createExpense({ title: title.trim(), date, amount, currency, category: category || 'other', description });
         revalidatePath('/');
         return { success: true };
     } catch (e: any) {

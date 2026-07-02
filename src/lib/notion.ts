@@ -41,6 +41,7 @@ export interface ExpenseItem {
     title: string;
     date: string;
     amount: number;
+    currency: string; // 'TWD' or configured foreign currency
     category: string; // reuses journey select
     description: string;
 }
@@ -231,6 +232,7 @@ export const getTripData = cache(async () => {
             title: page.properties.title?.title[0]?.plain_text || '未命名消費',
             date: page.properties.date?.date?.start || '',
             amount: page.properties.amount?.number ?? 0,
+            currency: page.properties.currency?.select?.name || 'TWD',
             category: page.properties.journey?.select?.name || 'other',
             description: page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
@@ -368,6 +370,7 @@ export interface CreateExpenseData {
     title: string;
     date: string;
     amount: number;
+    currency: string;
     category: string;
     description?: string;
 }
@@ -382,6 +385,7 @@ export async function createExpense(data: CreateExpenseData) {
             type: { select: { name: 'expense' } },
             journey: { select: { name: data.category } },
             amount: { number: data.amount },
+            currency: { select: { name: data.currency } },
             ...(data.description && {
                 description: { rich_text: [{ text: { content: data.description } }] },
             }),
