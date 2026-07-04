@@ -9,7 +9,8 @@ import {
     DialogDescription,
 } from "@/components/ui/dialog";
 import { ItineraryItem } from '@/lib/notion';
-import { Loader2, Info } from 'lucide-react';
+import { Loader2, Info, Clock3 } from 'lucide-react';
+import { NotionBlockRenderer } from './NotionBlockRenderer';
 
 interface ItineraryDetailsModalProps {
     item: ItineraryItem | null;
@@ -22,7 +23,7 @@ export default function ItineraryDetailsModal({ item, isOpen, onClose }: Itinera
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (isOpen && item?.id && item.hasContent) {
+        if (isOpen && item?.id) {
             const fetchBlocks = async () => {
                 setLoading(true);
                 try {
@@ -58,6 +59,25 @@ export default function ItineraryDetailsModal({ item, isOpen, onClose }: Itinera
                 </DialogHeader>
 
                 <div className="mt-4 space-y-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    {(item.time || item.reserved) && (
+                        <div className="grid grid-cols-1 gap-2">
+                            {item.time && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50/80 p-3 rounded-2xl border border-gray-100">
+                                    <Clock3 className="w-4 h-4 text-gray-400" />
+                                    <span className="font-bold text-gray-800">{item.time}</span>
+                                </div>
+                            )}
+                            {item.reserved && (
+                                <div className="flex items-center justify-between gap-3 text-sm text-gray-600 bg-gray-50/80 p-3 rounded-2xl border border-gray-100">
+                                    <span className="font-bold text-gray-400">Reservation</span>
+                                    <span className="inline-flex px-2 py-0.5 rounded-full border border-slate-100 bg-white text-xs font-bold text-slate-600">
+                                        {item.reserved}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {item.description && (
                         <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-100">
                             <div className="flex items-center gap-2 mb-2 text-gray-400">
@@ -77,42 +97,7 @@ export default function ItineraryDetailsModal({ item, isOpen, onClose }: Itinera
                                 <p className="text-xs font-bold uppercase tracking-widest">載入內容中...</p>
                             </div>
                         ) : blocks.length > 0 ? (
-                            <div className="space-y-3">
-                                {blocks.map((block: any) => (
-                                    <div key={block.id} className="text-gray-800">
-                                        {block.type === 'paragraph' && (
-                                            <p className="text-base leading-relaxed">
-                                                {block.paragraph.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </p>
-                                        )}
-                                        {block.type === 'bulleted_list_item' && (
-                                            <li className="list-disc ml-5 text-base leading-relaxed">
-                                                {block.bulleted_list_item.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </li>
-                                        )}
-                                        {block.type === 'numbered_list_item' && (
-                                            <li className="list-decimal ml-5 text-base leading-relaxed">
-                                                {block.numbered_list_item.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </li>
-                                        )}
-                                        {block.type === 'heading_1' && (
-                                            <h1 className="text-xl font-bold mt-4 mb-2">
-                                                {block.heading_1.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </h1>
-                                        )}
-                                        {block.type === 'heading_2' && (
-                                            <h2 className="text-lg font-bold mt-3 mb-2">
-                                                {block.heading_2.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </h2>
-                                        )}
-                                        {block.type === 'heading_3' && (
-                                            <h3 className="text-md font-bold mt-2 mb-1">
-                                                {block.heading_3.rich_text.map((t: any) => t.plain_text).join('')}
-                                            </h3>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                            <NotionBlockRenderer blocks={blocks} />
                         ) : !item.description && (
                             <div className="text-center py-12 text-gray-300 italic font-medium">
                                 尚無詳細內容

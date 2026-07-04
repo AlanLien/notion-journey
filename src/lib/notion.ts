@@ -22,6 +22,8 @@ export interface ItineraryItem {
     title: string;
     category: string;
     date: string;
+    time: string;
+    reserved: string;
     maps: string;
     img: string | null;
     description: string;
@@ -101,6 +103,12 @@ export const getTripData = cache(async () => {
     });
 
     const { dataSourceId, dbIcon } = await getDataSourceId(notion, databaseId);
+
+    const getRichText = (property: any): string => {
+        return property?.rich_text
+            ?.map((t: any) => t.plain_text)
+            .join('') || '';
+    };
 
     // Notion API v2025-09-03: dataSources.query
     let response;
@@ -196,6 +204,8 @@ export const getTripData = cache(async () => {
                 title: page.properties.title?.title[0]?.plain_text || '未命名項目',
                 category: category,
                 date: page.properties.date?.date?.start || '',
+                time: getRichText(page.properties.Time),
+                reserved: page.properties.Reserved?.select?.name || '',
                 maps: page.properties.maps?.url || '',
                 img: coverUrl,
                 description: description,
@@ -223,9 +233,9 @@ export const getTripData = cache(async () => {
             return new Date(a.date).getTime() - new Date(b.date).getTime();
         });
 
-    // 4. 記帳：找出 Type = 'expense' 的項目
+    // 4. 記帳：找出有金額的項目。行程也可以同時是花費，例如露營車、機票。
     const expenses: ExpenseItem[] = results
-        .filter(r => r.properties.type?.select?.name === 'expense')
+        .filter(r => typeof r.properties.amount?.number === 'number')
         .filter(r => r.properties.date?.date?.start)
         .map(page => ({
             id: page.id,
@@ -308,8 +318,10 @@ export interface CreateJourneyData {
 
 export async function createJourneyEntry(data: CreateJourneyData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             date: { date: { start: data.date } },
@@ -342,8 +354,10 @@ export interface CreateTaskData {
 
 export async function createTask(data: CreateTaskData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             type: { select: { name: 'journey' } },
@@ -377,8 +391,10 @@ export interface CreateExpenseData {
 
 export async function createExpense(data: CreateExpenseData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             date: { date: { start: data.date } },

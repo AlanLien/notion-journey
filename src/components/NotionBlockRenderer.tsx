@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Navigation, Phone } from 'lucide-react';
+import { CheckSquare, Navigation, Phone, Square } from 'lucide-react';
 
 export const renderBlockContent = (block: any) => {
     if (!block) return null;
@@ -102,6 +102,19 @@ export const renderBlockContent = (block: any) => {
             return <li className="ml-4 list-disc mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>;
         case 'numbered_list_item':
             return <li className="ml-4 list-decimal mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>;
+        case 'to_do':
+            return (
+                <div className="flex items-start gap-2 mb-2 text-slate-700">
+                    {value.checked ? (
+                        <CheckSquare size={18} className="mt-0.5 shrink-0 text-emerald-500" />
+                    ) : (
+                        <Square size={18} className="mt-0.5 shrink-0 text-slate-400" />
+                    )}
+                    <div className={cn("leading-relaxed", value.checked && "text-slate-400 line-through")}>
+                        {renderRichText(value.rich_text)}
+                    </div>
+                </div>
+            );
         case 'image':
             const src = value.type === 'external' ? value.external.url : value.file.url;
             return (

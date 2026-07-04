@@ -28,12 +28,10 @@ export default function ItineraryCard({ item }: ItineraryCardProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const { time } = parseNotionDateTime(item.date);
-    const timeStr = time;
+    const timeStr = item.time || time;
 
     const handleCardClick = () => {
-        if (item.hasContent || item.description) {
-            setIsModalOpen(true);
-        }
+        setIsModalOpen(true);
     };
 
     return (
@@ -42,7 +40,7 @@ export default function ItineraryCard({ item }: ItineraryCardProps) {
                 onClick={handleCardClick}
                 className={cn(
                     "border-none shadow-sm hover:shadow-md transition-all duration-300 rounded-3xl overflow-hidden bg-white",
-                    (item.hasContent || item.description) ? "cursor-pointer active:scale-[0.98]" : "cursor-default"
+                    "cursor-pointer active:scale-[0.98]"
                 )}
             >
                 {/* Page Cover Image */}
@@ -71,6 +69,11 @@ export default function ItineraryCard({ item }: ItineraryCardProps) {
                                 </span>
                             )}
                             <h3 className="font-bold text-xl text-gray-800 leading-tight">{item.title}</h3>
+                            {item.reserved && (
+                                <span className="inline-flex mt-1 px-2 py-0.5 rounded-full border border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-600">
+                                    {item.reserved}
+                                </span>
+                            )}
                             {item.description && (
                                 <p className="text-xs text-gray-400 font-medium line-clamp-1 mt-1">
                                     {item.description}
