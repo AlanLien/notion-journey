@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { getPasswordConfig, createJourneyEntry, updateJourneyDate, updateJourneyTime, createTask, updateTaskDone, createExpense } from '@/lib/notion';
+import { getPasswordConfig, createJourneyEntry, updateJourneyDate, updateJourneyTime, updateJourneyReserved, createTask, updateTaskDone, createExpense } from '@/lib/notion';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -83,6 +83,19 @@ export async function updateJourneyTimeAction(pageId: string, newTime: string) {
         return { success: true };
     } catch (e: any) {
         console.error('updateJourneyTimeAction error:', e);
+        return { success: false, message: e.message || '更新失敗' };
+    }
+}
+
+export async function updateJourneyReservedAction(pageId: string, reserved: string) {
+    if (!reserved?.trim()) return { success: false, message: '請選擇訂位狀態' };
+
+    try {
+        await updateJourneyReserved(pageId, reserved.trim());
+        revalidatePath('/');
+        return { success: true };
+    } catch (e: any) {
+        console.error('updateJourneyReservedAction error:', e);
         return { success: false, message: e.message || '更新失敗' };
     }
 }
