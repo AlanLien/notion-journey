@@ -1,8 +1,84 @@
-import React from 'react';
-import { cn } from '@/lib/utils';
-import { CheckSquare, Navigation, Phone, Square } from 'lucide-react';
+'use client';
 
-export const renderBlockContent = (block: any) => {
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { CheckSquare, Loader2, Navigation, Phone, Square } from 'lucide-react';
+
+interface RenderOptions {
+    editable?: boolean;
+}
+
+const ToDoBlock = ({ block, value, renderRichText, renderChildren, editable = false }: {
+    block: any;
+    value: any;
+    renderRichText: (textArr: any[]) => React.ReactNode;
+    renderChildren: (className?: string) => React.ReactNode;
+    editable?: boolean;
+}) => {
+    const [checked, setChecked] = useState(!!value.checked);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleToggle = async () => {
+        if (!editable || saving) return;
+
+        const nextChecked = !checked;
+        setChecked(nextChecked);
+        setSaving(true);
+        setError(null);
+
+        try {
+            const res = await fetch(`/api/notion/block/${block.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ checked: nextChecked }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || '更新失敗');
+            }
+        } catch (e: any) {
+            setChecked(!nextChecked);
+            setError(e.message || '更新失敗');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mb-2">
+            <div className="flex items-start gap-2 text-slate-700">
+                <button
+                    type="button"
+                    onClick={handleToggle}
+                    disabled={!editable || saving}
+                    className={cn(
+                        "mt-0.5 shrink-0 transition-all",
+                        editable && "active:scale-95 hover:scale-105",
+                        !editable && "cursor-default"
+                    )}
+                    aria-label={checked ? '取消勾選' : '勾選'}
+                >
+                    {saving ? (
+                        <Loader2 size={18} className="animate-spin text-slate-400" />
+                    ) : checked ? (
+                        <CheckSquare size={18} className="text-emerald-500" />
+                    ) : (
+                        <Square size={18} className="text-slate-400" />
+                    )}
+                </button>
+                <div className={cn("leading-relaxed", checked && "text-slate-400 line-through")}>
+                    {renderRichText(value.rich_text)}
+                </div>
+            </div>
+            {error && <p className="ml-7 mt-1 text-xs text-red-500">{error}</p>}
+            {renderChildren("ml-7 mt-1 space-y-1")}
+        </div>
+    );
+};
+
+export const renderBlockContent = (block: any, options: RenderOptions = {}) => {
     if (!block) return null;
     const type = block.type;
     const value = block[type];
@@ -35,7 +111,7 @@ export const renderBlockContent = (block: any) => {
             <div className={className}>
                 {block.children.map((child: any) => (
                     <React.Fragment key={child.id}>
-                        {renderBlockContent(child)}
+                        {renderBlockContent(child, options)}
                     </React.Fragment>
                 ))}
             </div>
@@ -145,19 +221,13 @@ export const renderBlockContent = (block: any) => {
             );
         case 'to_do':
             return (
-                <div className="mb-2">
-                    <div className="flex items-start gap-2 text-slate-700">
-                        {value.checked ? (
-                            <CheckSquare size={18} className="mt-0.5 shrink-0 text-emerald-500" />
-                        ) : (
-                            <Square size={18} className="mt-0.5 shrink-0 text-slate-400" />
-                        )}
-                        <div className={cn("leading-relaxed", value.checked && "text-slate-400 line-through")}>
-                            {renderRichText(value.rich_text)}
-                        </div>
-                    </div>
-                    {renderChildren("ml-7 mt-1 space-y-1")}
-                </div>
+                <ToDoBlock
+                    block={block}
+                    value={value}
+                    renderRichText={renderRichText}
+                    renderChildren={renderChildren}
+                    editable={!!options.editable}
+                />
             );
         case 'column_list':
             return (
@@ -204,16 +274,17 @@ export const renderBlockContent = (block: any) => {
 
 interface NotionBlockRendererProps {
     blocks: any[];
+    editable?: boolean;
 }
 
-export const NotionBlockRenderer: React.FC<NotionBlockRendererProps> = ({ blocks }) => {
+export const NotionBlockRenderer: React.FC<NotionBlockRendererProps> = ({ blocks, editable = false }) => {
     if (!blocks || blocks.length === 0) return null;
 
     return (
         <div className="space-y-1">
             {blocks.map((block) => (
                 <React.Fragment key={block.id}>
-                    {renderBlockContent(block)}
+                    {renderBlockContent(block, { editable })}
                 </React.Fragment>
             ))}
         </div>
