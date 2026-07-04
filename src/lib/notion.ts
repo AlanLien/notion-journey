@@ -223,9 +223,9 @@ export const getTripData = cache(async () => {
             return new Date(a.date).getTime() - new Date(b.date).getTime();
         });
 
-    // 4. 記帳：找出 Type = 'expense' 的項目
+    // 4. 記帳：找出有金額的項目。行程也可以同時是花費，例如露營車、機票。
     const expenses: ExpenseItem[] = results
-        .filter(r => r.properties.type?.select?.name === 'expense')
+        .filter(r => typeof r.properties.amount?.number === 'number')
         .filter(r => r.properties.date?.date?.start)
         .map(page => ({
             id: page.id,
