@@ -5,6 +5,10 @@ import PasswordProtection from "@/components/PasswordProtection";
 
 import { getTripData } from "@/lib/notion";
 
+const appIcons = {
+    icon: "/favicon.svg",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
     const cookieStore = await cookies();
     const isAuthenticated = cookieStore.get('journey_auth')?.value === 'true';
@@ -13,9 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
         return {
             title: "旅程準備中...",
             description: "Protected Journey View",
-            icons: {
-                icon: "/favicon.png",
-            },
+            icons: appIcons,
         };
     }
 
@@ -28,17 +30,13 @@ export async function generateMetadata(): Promise<Metadata> {
                 capable: true,
                 statusBarStyle: "black-translucent",
             },
-            icons: {
-                icon: "/favicon.png",
-            },
+            icons: appIcons,
         };
-    } catch (e) {
+    } catch {
         return {
             title: "旅遊行程看板",
             description: "基於 Notion 的動態旅遊看板渲染器",
-            icons: {
-                icon: "/favicon.png",
-            },
+            icons: appIcons,
         };
     }
 }
@@ -64,7 +62,8 @@ export default async function RootLayout({
         <html lang="zh-TW">
             <head>
                 <link rel="manifest" href="/manifest.json" />
-                <link rel="apple-touch-icon" href="/icon.png" />
+                <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+                <link rel="apple-touch-icon" href="/favicon.svg" />
                 <link rel="preconnect" href="https://fonts.googleapis.com" />
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
                 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
