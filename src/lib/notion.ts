@@ -308,8 +308,10 @@ export interface CreateJourneyData {
 
 export async function createJourneyEntry(data: CreateJourneyData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             date: { date: { start: data.date } },
@@ -342,8 +344,10 @@ export interface CreateTaskData {
 
 export async function createTask(data: CreateTaskData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             type: { select: { name: 'journey' } },
@@ -377,8 +381,10 @@ export interface CreateExpenseData {
 
 export async function createExpense(data: CreateExpenseData) {
     const { notion, databaseId } = getNotionClient();
+    const { dataSourceId } = await getDataSourceId(notion, databaseId);
+
     return notion.pages.create({
-        parent: { database_id: databaseId },
+        parent: { data_source_id: dataSourceId },
         properties: {
             title: { title: [{ text: { content: data.title } }] },
             date: { date: { start: data.date } },
