@@ -61,6 +61,15 @@ function normalizeJourneyCategory(categoryName?: string | null): string {
     return categoryName || 'other';
 }
 
+function findPropertyName(properties: Record<string, any>, names: string[]) {
+    for (const name of names) {
+        if (properties[name]) return name;
+    }
+
+    const lowerNames = names.map(name => name.toLowerCase());
+    return Object.keys(properties).find(key => lowerNames.includes(key.toLowerCase()));
+}
+
 /**
  * 將 Emoji 轉換為 SVG Data URL，以便作為 Favicon 使用
  */
@@ -118,13 +127,8 @@ export const getTripData = cache(async () => {
     const { dataSourceId, dbIcon } = await getDataSourceId(notion, databaseId);
 
     const getProperty = (properties: Record<string, any>, names: string[]) => {
-        for (const name of names) {
-            if (properties[name]) return properties[name];
-        }
-
-        const lowerNames = names.map(name => name.toLowerCase());
-        const matchedKey = Object.keys(properties).find(key => lowerNames.includes(key.toLowerCase()));
-        return matchedKey ? properties[matchedKey] : undefined;
+        const propertyName = findPropertyName(properties, names);
+        return propertyName ? properties[propertyName] : undefined;
     };
 
     const getPlainText = (property: any): string => {
@@ -419,6 +423,41 @@ export async function updateJourneyDate(pageId: string, newDate: string) {
     });
 }
 
+export async function updateJourneyTime(pageId: string, newTime: string) {
+    const { notion } = getNotionClient();
+    const page = await notion.pages.retrieve({ page_id: pageId }) as any;
+    const propertyName = findPropertyName(page.properties || {}, ['Time', 'time']);
+
+    if (!propertyName) {
+        throw new Error('找不到 Time/time 欄位');
+    }
+
+    const property = page.properties[propertyName];
+    const type = property?.type;
+
+    if (type === 'rich_text') {
+        return notion.pages.update({
+            page_id: pageId,
+            properties: {
+                [propertyName]: { rich_text: [{ text: { content: newTime } }] },
+            },
+        });
+    }
+
+    if (type === 'date') {
+        const dateStart = page.properties.date?.date?.start || new Date().toISOString().slice(0, 10);
+        const dateOnly = dateStart.split('T')[0];
+        return notion.pages.update({
+            page_id: pageId,
+            properties: {
+                [propertyName]: { date: { start: `${dateOnly}T${newTime}:00` } },
+            },
+        });
+    }
+
+    throw new Error(`Time 欄位目前是 ${type || '未知'} 類型，APP 只能更新文字或日期類型`);
+}
+
 export interface CreateTaskData {
     title: string;
     date?: string;
@@ -448,6 +487,16 @@ export async function updateTaskDone(pageId: string, done: boolean) {
         page_id: pageId,
         properties: {
             done: { checkbox: done },
+        },
+    });
+}
+
+export async function updateToDoBlock(blockId: string, checked: boolean) {
+    const { notion } = getNotionClient();
+    return notion.blocks.update({
+        block_id: blockId,
+        to_do: {
+            checked,
         },
     });
 }
