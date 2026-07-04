@@ -104,10 +104,49 @@ export const getTripData = cache(async () => {
 
     const { dataSourceId, dbIcon } = await getDataSourceId(notion, databaseId);
 
-    const getRichText = (property: any): string => {
-        return property?.rich_text
-            ?.map((t: any) => t.plain_text)
-            .join('') || '';
+    const getProperty = (properties: Record<string, any>, names: string[]) => {
+        for (const name of names) {
+            if (properties[name]) return properties[name];
+        }
+
+        const lowerNames = names.map(name => name.toLowerCase());
+        const matchedKey = Object.keys(properties).find(key => lowerNames.includes(key.toLowerCase()));
+        return matchedKey ? properties[matchedKey] : undefined;
+    };
+
+    const getPlainText = (property: any): string => {
+        if (!property) return '';
+
+        if (property.rich_text) {
+            return property.rich_text.map((t: any) => t.plain_text).join('');
+        }
+        if (property.title) {
+            return property.title.map((t: any) => t.plain_text).join('');
+        }
+        if (property.select) {
+            return property.select.name || '';
+        }
+        if (property.date?.start) {
+            return property.date.start;
+        }
+        if (typeof property.number === 'number') {
+            return String(property.number);
+        }
+        if (property.formula) {
+            const formula = property.formula;
+            if (formula.type === 'string') return formula.string || '';
+            if (formula.type === 'number') return typeof formula.number === 'number' ? String(formula.number) : '';
+            if (formula.type === 'date') return formula.date?.start || '';
+            if (formula.type === 'boolean') return formula.boolean ? 'true' : 'false';
+        }
+
+        return '';
+    };
+
+    const getSortDate = (item: ItineraryItem) => {
+        const dateOnly = item.date.split('T')[0];
+        const timeOnly = item.time.match(/\d{1,2}:\d{2}/)?.[0];
+        return new Date(timeOnly ? `${dateOnly}T${timeOnly}` : item.date).getTime();
     };
 
     // Notion API v2025-09-03: dataSources.query
@@ -204,8 +243,8 @@ export const getTripData = cache(async () => {
                 title: page.properties.title?.title[0]?.plain_text || '未命名項目',
                 category: category,
                 date: page.properties.date?.date?.start || '',
-                time: getRichText(page.properties.Time),
-                reserved: page.properties.Reserved?.select?.name || '',
+                time: getPlainText(getProperty(page.properties, ['Time', 'time'])),
+                reserved: getProperty(page.properties, ['Reserved', 'reserved'])?.select?.name || '',
                 maps: page.properties.maps?.url || '',
                 img: coverUrl,
                 description: description,
@@ -213,7 +252,7 @@ export const getTripData = cache(async () => {
                 icon,
             };
         })
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => getSortDate(a) - getSortDate(b));
 
     // 3. 任務：找出 type='journey' 且 journey='mission' 的項目
     const tasks: TaskItem[] = results
@@ -289,15 +328,35 @@ export const getPageBlocks = cache(async (pageId: string) => {
     const notion = new Client({ auth: apiKey });
 
     try {
-        const response = await notion.blocks.children.list({
-            block_id: pageId,
-        });
-        return response.results;
+        return await getBlockChildrenRecursive(notion, pageId);
     } catch (error: any) {
         console.error("Notion getPageBlocks Error:", error);
         throw error;
     }
 });
+
+async function getBlockChildrenRecursive(notion: Client, blockId: string): Promise<any[]> {
+    const children: any[] = [];
+    let startCursor: string | undefined;
+
+    do {
+        const response = await notion.blocks.children.list({
+            block_id: blockId,
+            start_cursor: startCursor,
+        });
+
+        for (const block of response.results as any[]) {
+            if (block.has_children) {
+                block.children = await getBlockChildrenRecursive(notion, block.id);
+            }
+            children.push(block);
+        }
+
+        startCursor = response.has_more ? response.next_cursor || undefined : undefined;
+    } while (startCursor);
+
+    return children;
+}
 
 // ─── Write Functions ──────────────────────────────────────────────────────────
 
