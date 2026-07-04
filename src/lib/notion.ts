@@ -48,6 +48,19 @@ export interface ExpenseItem {
     description: string;
 }
 
+function normalizeJourneyCategory(categoryName?: string | null): string {
+    const normalized = (categoryName || '').toLowerCase();
+
+    if (normalized.includes('mission')) return 'mission';
+    if (normalized.includes('restaurant')) return 'restaurant';
+    if (normalized.includes('shopping')) return 'shopping';
+    if (normalized.includes('transport')) return 'transport';
+    if (normalized.includes('hotel')) return 'hotel';
+    if (normalized.includes('visit')) return 'visit';
+
+    return categoryName || 'other';
+}
+
 /**
  * 將 Emoji 轉換為 SVG Data URL，以便作為 Favicon 使用
  */
@@ -208,7 +221,7 @@ export const getTripData = cache(async () => {
     // 2. 行程：找出 Type = 'journey' 的項目，排除 mission（任務）
     const itinerary: ItineraryItem[] = results
         .filter(r => r.properties.type?.select?.name === 'journey')
-        .filter(r => r.properties.journey?.select?.name !== 'mission')
+        .filter(r => normalizeJourneyCategory(r.properties.journey?.select?.name) !== 'mission')
         .filter(r => r.properties.date?.date?.start)
         .map(page => {
             let coverUrl = null;
@@ -220,7 +233,7 @@ export const getTripData = cache(async () => {
                 }
             }
 
-            const category = page.properties.journey?.select?.name || 'other';
+            const category = normalizeJourneyCategory(page.properties.journey?.select?.name);
 
             const description = page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
@@ -256,7 +269,7 @@ export const getTripData = cache(async () => {
 
     // 3. 任務：找出 type='journey' 且 journey='mission' 的項目
     const tasks: TaskItem[] = results
-        .filter(r => r.properties.type?.select?.name === 'journey' && r.properties.journey?.select?.name === 'mission')
+        .filter(r => r.properties.type?.select?.name === 'journey' && normalizeJourneyCategory(r.properties.journey?.select?.name) === 'mission')
         .map(page => ({
             id: page.id,
             title: page.properties.title?.title[0]?.plain_text || '未命名任務',
@@ -282,7 +295,7 @@ export const getTripData = cache(async () => {
             date: page.properties.date?.date?.start || '',
             amount: page.properties.amount?.number ?? 0,
             currency: page.properties.currency?.select?.name || 'TWD',
-            category: page.properties.journey?.select?.name || 'other',
+            category: normalizeJourneyCategory(page.properties.journey?.select?.name),
             description: page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
                 .join('') || '',
