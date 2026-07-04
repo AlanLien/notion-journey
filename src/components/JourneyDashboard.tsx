@@ -37,6 +37,12 @@ const toFloatingDate = (dateStr: string): Date => {
     return parseISO(dateTimeStr);
 };
 
+const toSortableJourneyTime = (item: ItineraryItem): number => {
+    const { date } = parseNotionDateTime(item.date);
+    const time = item.time?.match(/\d{1,2}:\d{2}/)?.[0];
+    return parseISO(time ? `${date} ${time}` : parseNotionDateTime(item.date).dateTimeStr).getTime();
+};
+
 export default function JourneyDashboard({ data, requiredPassword, isAuthenticated }: JourneyDashboardProps) {
     const { metadata, itinerary, tasks, expenses } = data;
 
@@ -50,7 +56,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
 
     const sortedJourneys = useMemo(() =>
         [...itinerary].sort((a, b) => {
-            return toFloatingDate(a.date).getTime() - toFloatingDate(b.date).getTime();
+            return toSortableJourneyTime(a) - toSortableJourneyTime(b);
         }),
         [itinerary]);
 
