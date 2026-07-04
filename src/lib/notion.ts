@@ -22,6 +22,8 @@ export interface ItineraryItem {
     title: string;
     category: string;
     date: string;
+    time: string;
+    reserved: string;
     maps: string;
     img: string | null;
     description: string;
@@ -101,6 +103,12 @@ export const getTripData = cache(async () => {
     });
 
     const { dataSourceId, dbIcon } = await getDataSourceId(notion, databaseId);
+
+    const getRichText = (property: any): string => {
+        return property?.rich_text
+            ?.map((t: any) => t.plain_text)
+            .join('') || '';
+    };
 
     // Notion API v2025-09-03: dataSources.query
     let response;
@@ -196,6 +204,8 @@ export const getTripData = cache(async () => {
                 title: page.properties.title?.title[0]?.plain_text || '未命名項目',
                 category: category,
                 date: page.properties.date?.date?.start || '',
+                time: getRichText(page.properties.Time),
+                reserved: page.properties.Reserved?.select?.name || '',
                 maps: page.properties.maps?.url || '',
                 img: coverUrl,
                 description: description,
