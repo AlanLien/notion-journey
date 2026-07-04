@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { NotionBlockRenderer } from '@/components/NotionBlockRenderer';
-import { updateJourneyDateAction, updateJourneyTimeAction } from '@/app/actions';
+import { updateJourneyDateAction, updateJourneyReservedAction, updateJourneyTimeAction } from '@/app/actions';
 
 // Mapping category strings (from Notion select) to Icons
 const TYPE_ICONS: Record<string, any> = {
@@ -34,6 +34,16 @@ const RESERVED_COLORS: Record<string, string> = {
     'No need': 'bg-slate-50 text-slate-500 border-slate-100',
 };
 
+const RESERVED_OPTIONS = ['Reserved', 'Not Yet', 'No Need'];
+
+const normalizeReservedValue = (value: string) => {
+    const normalized = value.toLowerCase();
+    if (normalized.includes('reserved')) return 'Reserved';
+    if (normalized.includes('not')) return 'Not Yet';
+    if (normalized.includes('no need')) return 'No Need';
+    return value || 'Reserved';
+};
+
 interface JourneyCardProps {
     item: ItineraryItem;
     isPast?: boolean;
@@ -44,7 +54,6 @@ interface JourneyCardProps {
 export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, hideImage = false, isAuthenticated = false }) => {
     const CategoryIcon = TYPE_ICONS[item.category] || Info;
     const colorClass = TYPE_COLORS[item.category] || 'bg-gray-100 text-gray-600';
-    const reservedClass = item.reserved ? RESERVED_COLORS[item.reserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
 
     const renderIcon = () => {
         if (item.icon) {
@@ -66,9 +75,15 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [timeValue, setTimeValue] = useState(item.time || '00:00');
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [editingInfoTime, setEditingInfoTime] = useState(false);
+    const [editingReserved, setEditingReserved] = useState(false);
+    const [savingInfo, setSavingInfo] = useState(false);
     // Local display override after save
     const [displayDate, setDisplayDate] = useState(item.date);
     const [displayTime, setDisplayTime] = useState(item.time);
+    const [displayReserved, setDisplayReserved] = useState(item.reserved);
+    const [reservedValue, setReservedValue] = useState(normalizeReservedValue(item.reserved));
+    const reservedClass = displayReserved ? RESERVED_COLORS[displayReserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
 
     const fetchBlocks = async () => {
         if (blocks) return;
@@ -107,6 +122,43 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
         }
     };
 
+    const handleSaveInfoTime = async () => {
+        if (!timeValue) return;
+        setSavingInfo(true);
+        setSaveError(null);
+        try {
+            const result = await updateJourneyTimeAction(item.id, timeValue);
+            if (result.success) {
+                setDisplayTime(timeValue);
+                setEditingInfoTime(false);
+            } else {
+                setSaveError(result.message || '儲存失敗');
+            }
+        } catch (e: any) {
+            setSaveError(e.message || '儲存失敗');
+        } finally {
+            setSavingInfo(false);
+        }
+    };
+
+    const handleSaveReserved = async () => {
+        setSavingInfo(true);
+        setSaveError(null);
+        try {
+            const result = await updateJourneyReservedAction(item.id, reservedValue);
+            if (result.success) {
+                setDisplayReserved(reservedValue);
+                setEditingReserved(false);
+            } else {
+                setSaveError(result.message || '儲存失敗');
+            }
+        } catch (e: any) {
+            setSaveError(e.message || '儲存失敗');
+        } finally {
+            setSavingInfo(false);
+        }
+    };
+
     const dateObj = parseISO(displayDate);
     const timeStr = displayTime || format(dateObj, 'HH:mm');
     const dateStr = format(dateObj, 'yyyy-MM-dd');
@@ -132,6 +184,8 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                 if (open) fetchBlocks();
                 if (!open) {
                     setEditingSchedule(false);
+                    setEditingInfoTime(false);
+                    setEditingReserved(false);
                     setSaveError(null);
                 }
             }}>
@@ -153,9 +207,9 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                         </div>
                                         <h3 className="font-bold text-slate-800 text-base leading-tight">{item.title}</h3>
                                     </div>
-                                    {item.reserved && (
+                                    {displayReserved && (
                                         <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold", reservedClass)}>
-                                            {item.reserved}
+                                            {displayReserved}
                                         </span>
                                     )}
                                 </div>
@@ -261,23 +315,107 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                             )}
                         </div>
 
-                        {(displayTime || item.reserved) && (
+                        {(displayTime || displayReserved) && (
                             <div className="mb-6 grid grid-cols-1 gap-2">
                                 {displayTime && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2">
-                                        <Clock3 size={15} className="text-slate-400" />
-                                        <span className="font-semibold text-slate-700">{displayTime}</span>
-                                    </div>
+                                    editingInfoTime ? (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <Clock3 size={15} className="text-blue-400" />
+                                                <input
+                                                    type="time"
+                                                    value={timeValue}
+                                                    onChange={(e) => setTimeValue(e.target.value)}
+                                                    className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono font-bold"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={handleSaveInfoTime}
+                                                    disabled={savingInfo}
+                                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
+                                                >
+                                                    {savingInfo ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                                    {savingInfo ? '儲存中...' : '儲存'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setEditingInfoTime(false); setTimeValue(displayTime || '00:00'); setSaveError(null); }}
+                                                    disabled={savingInfo}
+                                                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold"
+                                                >
+                                                    取消
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => isAuthenticated && setEditingInfoTime(true)}
+                                            className={cn(
+                                                "w-full flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 text-left",
+                                                isAuthenticated && "hover:border-blue-200 hover:bg-blue-50/50 transition-colors"
+                                            )}
+                                        >
+                                            <Clock3 size={15} className="text-slate-400" />
+                                            <span className="font-semibold text-slate-700 flex-1">{displayTime}</span>
+                                            {isAuthenticated && <Pencil size={13} className="text-slate-300" />}
+                                        </button>
+                                    )
                                 )}
-                                {item.reserved && (
-                                    <div className="flex items-center justify-between gap-3 text-sm bg-white border border-slate-100 rounded-xl px-3 py-2">
-                                        <span className="text-slate-500">Reservation</span>
-                                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-bold", reservedClass)}>
-                                            {item.reserved}
-                                        </span>
-                                    </div>
+                                {displayReserved && (
+                                    editingReserved ? (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                                            <select
+                                                value={reservedValue}
+                                                onChange={(e) => setReservedValue(e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-semibold"
+                                            >
+                                                {RESERVED_OPTIONS.map(option => (
+                                                    <option key={option} value={option}>{option}</option>
+                                                ))}
+                                            </select>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={handleSaveReserved}
+                                                    disabled={savingInfo}
+                                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
+                                                >
+                                                    {savingInfo ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                                    {savingInfo ? '儲存中...' : '儲存'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setEditingReserved(false); setReservedValue(normalizeReservedValue(displayReserved)); setSaveError(null); }}
+                                                    disabled={savingInfo}
+                                                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold"
+                                                >
+                                                    取消
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => isAuthenticated && setEditingReserved(true)}
+                                            className={cn(
+                                                "w-full flex items-center justify-between gap-3 text-sm bg-white border border-slate-100 rounded-xl px-3 py-2 text-left",
+                                                isAuthenticated && "hover:border-blue-200 hover:bg-blue-50/50 transition-colors"
+                                            )}
+                                        >
+                                            <span className="text-slate-500">Reservation</span>
+                                            <span className="inline-flex items-center gap-2">
+                                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-bold", reservedClass)}>
+                                                    {displayReserved}
+                                                </span>
+                                                {isAuthenticated && <Pencil size={13} className="text-slate-300" />}
+                                            </span>
+                                        </button>
+                                    )
                                 )}
                             </div>
+                        )}
+
+                        {saveError && !editingSchedule && (
+                            <p className="mb-4 text-xs text-red-500">{saveError}</p>
                         )}
 
                         {/* Content Section */}
