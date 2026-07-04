@@ -458,6 +458,23 @@ export async function updateJourneyTime(pageId: string, newTime: string) {
     throw new Error(`Time 欄位目前是 ${type || '未知'} 類型，APP 只能更新文字或日期類型`);
 }
 
+export async function updateJourneyReserved(pageId: string, reserved: string) {
+    const { notion } = getNotionClient();
+    const page = await notion.pages.retrieve({ page_id: pageId }) as any;
+    const propertyName = findPropertyName(page.properties || {}, ['Reserved', 'reserved']);
+
+    if (!propertyName) {
+        throw new Error('找不到 Reserved/reserved 欄位');
+    }
+
+    return notion.pages.update({
+        page_id: pageId,
+        properties: {
+            [propertyName]: { select: { name: reserved } },
+        },
+    });
+}
+
 export interface CreateTaskData {
     title: string;
     date?: string;
