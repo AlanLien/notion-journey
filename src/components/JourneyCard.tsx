@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Plane, Hotel, MapPin, Utensils, ShoppingBag, Info, ExternalLink, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Plane, Hotel, MapPin, Utensils, ShoppingBag, Info, ExternalLink, Pencil, Check, Loader2, Clock3 } from 'lucide-react';
 import { ItineraryItem } from '@/lib/notion';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -25,6 +25,12 @@ const TYPE_COLORS: Record<string, string> = {
     shopping: 'bg-pink-100 text-pink-600',
 };
 
+const RESERVED_COLORS: Record<string, string> = {
+    Reserved: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    'Not Yet': 'bg-amber-50 text-amber-700 border-amber-100',
+    'No Need': 'bg-slate-50 text-slate-500 border-slate-100',
+};
+
 interface JourneyCardProps {
     item: ItineraryItem;
     isPast?: boolean;
@@ -35,6 +41,7 @@ interface JourneyCardProps {
 export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, hideImage = false, isAuthenticated = false }) => {
     const CategoryIcon = TYPE_ICONS[item.category] || Info;
     const colorClass = TYPE_COLORS[item.category] || 'bg-gray-100 text-gray-600';
+    const reservedClass = item.reserved ? RESERVED_COLORS[item.reserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
 
     const renderIcon = () => {
         if (item.icon) {
@@ -59,7 +66,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [displayDate, setDisplayDate] = useState(item.date);
 
     const fetchBlocks = async () => {
-        if (blocks || !item.hasContent) return;
+        if (blocks) return;
         setIsLoading(true);
         try {
             const res = await fetch(`/api/notion/page/${item.id}`);
@@ -94,7 +101,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     };
 
     const dateObj = parseISO(displayDate);
-    const timeStr = format(dateObj, 'HH:mm');
+    const timeStr = item.time || format(dateObj, 'HH:mm');
     const dateStr = format(dateObj, 'yyyy-MM-dd');
 
     return (
@@ -125,7 +132,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                     <div className={cn("p-2.5 flex gap-3 cursor-pointer hover:bg-white/50 transition-colors", item.img && !hideImage ? "" : "pt-3")}>
                         {/* Time & Line */}
                         <div className="flex flex-col items-center min-w-[3rem]">
-                            <span className="text-xs font-bold text-slate-500 font-mono">{timeStr}</span>
+                            <span className="text-xs font-bold text-slate-500 font-mono text-center leading-tight">{timeStr}</span>
                             <div className="flex-1 w-0.5 bg-slate-200 my-1 rounded-full min-h-[1.5rem]" />
                         </div>
 
@@ -139,6 +146,11 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                         </div>
                                         <h3 className="font-bold text-slate-800 text-base leading-tight">{item.title}</h3>
                                     </div>
+                                    {item.reserved && (
+                                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold", reservedClass)}>
+                                            {item.reserved}
+                                        </span>
+                                    )}
                                 </div>
                                 {item.maps && (
                                     <a
@@ -185,7 +197,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
 
                     <div className="p-6 pt-4 flex-1 overflow-y-auto">
                         {/* Date/Time Row */}
-                        <div className="mb-6">
+                        <div className="mb-4">
                             {!editingDate ? (
                                 <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                     <div className="font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
@@ -233,6 +245,25 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                 </div>
                             )}
                         </div>
+
+                        {(item.time || item.reserved) && (
+                            <div className="mb-6 grid grid-cols-1 gap-2">
+                                {item.time && (
+                                    <div className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2">
+                                        <Clock3 size={15} className="text-slate-400" />
+                                        <span className="font-semibold text-slate-700">{item.time}</span>
+                                    </div>
+                                )}
+                                {item.reserved && (
+                                    <div className="flex items-center justify-between gap-3 text-sm bg-white border border-slate-100 rounded-xl px-3 py-2">
+                                        <span className="text-slate-500">Reservation</span>
+                                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-bold", reservedClass)}>
+                                            {item.reserved}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Content Section */}
                         <div className="text-slate-600 leading-relaxed text-sm">
