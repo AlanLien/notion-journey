@@ -27,7 +27,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const RESERVED_COLORS: Record<string, string> = {
     Reserved: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-    'Not Yet': 'bg-amber-50 text-amber-700 border-amber-100',
+    'Not Yet': 'bg-red-50 text-red-700 border-red-100',
     'No Need': 'bg-slate-50 text-slate-500 border-slate-100',
 };
 
