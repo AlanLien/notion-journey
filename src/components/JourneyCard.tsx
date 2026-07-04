@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { NotionBlockRenderer } from '@/components/NotionBlockRenderer';
-import { updateJourneyDateAction } from '@/app/actions';
+import { updateJourneyDateAction, updateJourneyTimeAction } from '@/app/actions';
 
 // Mapping category strings (from Notion select) to Icons
 const TYPE_ICONS: Record<string, any> = {
@@ -60,13 +60,15 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [blocks, setBlocks] = useState<any[] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Date edit state
-    const [editingDate, setEditingDate] = useState(false);
-    const [dateValue, setDateValue] = useState(item.date.slice(0, 16)); // "YYYY-MM-DDTHH:mm"
-    const [savingDate, setSavingDate] = useState(false);
+    // Schedule edit state
+    const [editingSchedule, setEditingSchedule] = useState(false);
+    const [dateValue, setDateValue] = useState(item.date.split('T')[0]);
+    const [timeValue, setTimeValue] = useState(item.time || '00:00');
+    const [savingSchedule, setSavingSchedule] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     // Local display override after save
     const [displayDate, setDisplayDate] = useState(item.date);
+    const [displayTime, setDisplayTime] = useState(item.time);
 
     const fetchBlocks = async () => {
         if (blocks) return;
@@ -84,27 +86,29 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
         }
     };
 
-    const handleSaveDate = async () => {
-        if (!dateValue) return;
-        setSavingDate(true);
+    const handleSaveSchedule = async () => {
+        if (!dateValue || !timeValue) return;
+        setSavingSchedule(true);
         setSaveError(null);
         try {
-            const result = await updateJourneyDateAction(item.id, dateValue);
-            if (result.success) {
+            const dateResult = await updateJourneyDateAction(item.id, dateValue);
+            const timeResult = await updateJourneyTimeAction(item.id, timeValue);
+            if (dateResult.success && timeResult.success) {
                 setDisplayDate(dateValue);
-                setEditingDate(false);
+                setDisplayTime(timeValue);
+                setEditingSchedule(false);
             } else {
-                setSaveError(result.message || '儲存失敗');
+                setSaveError(dateResult.message || timeResult.message || '儲存失敗');
             }
         } catch (e: any) {
             setSaveError(e.message || '儲存失敗');
         } finally {
-            setSavingDate(false);
+            setSavingSchedule(false);
         }
     };
 
     const dateObj = parseISO(displayDate);
-    const timeStr = item.time || format(dateObj, 'HH:mm');
+    const timeStr = displayTime || format(dateObj, 'HH:mm');
     const dateStr = format(dateObj, 'yyyy-MM-dd');
 
     return (
@@ -127,7 +131,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
             <Dialog onOpenChange={(open) => {
                 if (open) fetchBlocks();
                 if (!open) {
-                    setEditingDate(false);
+                    setEditingSchedule(false);
                     setSaveError(null);
                 }
             }}>
@@ -201,7 +205,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                     <div className="p-6 pt-4 flex-1 overflow-y-auto">
                         {/* Date/Time Row */}
                         <div className="mb-4">
-                            {!editingDate ? (
+                            {!editingSchedule ? (
                                 <div className="flex items-center gap-2 text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                     <div className="font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
                                         {timeStr}
@@ -209,9 +213,9 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                     <span className="text-sm border-l border-slate-200 pl-2 flex-1">{dateStr}</span>
                                     {isAuthenticated && (
                                         <button
-                                            onClick={() => setEditingDate(true)}
+                                            onClick={() => setEditingSchedule(true)}
                                             className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-blue-600 transition-colors"
-                                            title="編輯日期"
+                                            title="編輯日期與時間"
                                         >
                                             <Pencil size={14} />
                                         </button>
@@ -219,27 +223,35 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                 </div>
                             ) : (
                                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-200 space-y-2">
-                                    <input
-                                        type="datetime-local"
-                                        value={dateValue}
-                                        onChange={(e) => setDateValue(e.target.value)}
-                                        className="w-full px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
-                                    />
+                                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                                        <input
+                                            type="time"
+                                            value={timeValue}
+                                            onChange={(e) => setTimeValue(e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono font-bold"
+                                        />
+                                        <input
+                                            type="date"
+                                            value={dateValue}
+                                            onChange={(e) => setDateValue(e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                                        />
+                                    </div>
                                     {saveError && (
                                         <p className="text-xs text-red-500">{saveError}</p>
                                     )}
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={handleSaveDate}
-                                            disabled={savingDate}
+                                            onClick={handleSaveSchedule}
+                                            disabled={savingSchedule}
                                             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
                                         >
-                                            {savingDate ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                                            {savingDate ? '儲存中...' : '儲存'}
+                                            {savingSchedule ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                            {savingSchedule ? '儲存中...' : '儲存'}
                                         </button>
                                         <button
-                                            onClick={() => { setEditingDate(false); setDateValue(displayDate.slice(0, 16)); setSaveError(null); }}
-                                            disabled={savingDate}
+                                            onClick={() => { setEditingSchedule(false); setDateValue(displayDate.split('T')[0]); setTimeValue(displayTime || '00:00'); setSaveError(null); }}
+                                            disabled={savingSchedule}
                                             className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold"
                                         >
                                             取消
@@ -249,12 +261,12 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                             )}
                         </div>
 
-                        {(item.time || item.reserved) && (
+                        {(displayTime || item.reserved) && (
                             <div className="mb-6 grid grid-cols-1 gap-2">
-                                {item.time && (
+                                {displayTime && (
                                     <div className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2">
                                         <Clock3 size={15} className="text-slate-400" />
-                                        <span className="font-semibold text-slate-700">{item.time}</span>
+                                        <span className="font-semibold text-slate-700">{displayTime}</span>
                                     </div>
                                 )}
                                 {item.reserved && (
@@ -283,7 +295,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                             )}
 
                             {blocks && blocks.length > 0 && (
-                                <NotionBlockRenderer blocks={blocks} />
+                                <NotionBlockRenderer blocks={blocks} editable={isAuthenticated} />
                             )}
                         </div>
 
