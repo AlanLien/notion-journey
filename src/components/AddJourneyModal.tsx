@@ -7,12 +7,12 @@ import { createJourneyAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
 
 const CATEGORIES = [
-    { value: 'visit', label: '景點', emoji: '📍' },
-    { value: 'restaurant', label: '餐廳', emoji: '🍜' },
-    { value: 'shopping', label: '購物', emoji: '🛍️' },
-    { value: 'hotel', label: '住宿', emoji: '🏨' },
-    { value: 'transport', label: '交通', emoji: '✈️' },
-    { value: 'other', label: '其他', emoji: '📌' },
+    { value: '🦬 visit', label: '景點', emoji: '🦬' },
+    { value: '🍕 restaurant', label: '餐廳', emoji: '🍕' },
+    { value: '🛒 shopping', label: '購物', emoji: '🛒' },
+    { value: '🏠 hotel', label: '住宿', emoji: '🏠' },
+    { value: '🚗 transport', label: '交通', emoji: '🚗' },
+    { value: '📌 other', label: '其他', emoji: '📌' },
 ];
 
 function SubmitButton() {
@@ -114,7 +114,7 @@ export const AddJourneyModal: React.FC<AddJourneyModalProps> = ({ defaultDate })
                                 <div className="grid grid-cols-3 gap-2">
                                     {CATEGORIES.map((cat) => (
                                         <label key={cat.value} className="cursor-pointer">
-                                            <input type="radio" name="category" value={cat.value} defaultChecked={cat.value === 'visit'} className="sr-only peer" />
+                                            <input type="radio" name="category" value={cat.value} defaultChecked={cat.value === '🦬 visit'} className="sr-only peer" />
                                             <div className="peer-checked:bg-blue-50 peer-checked:border-blue-400 peer-checked:text-blue-700 border border-slate-200 rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-slate-500 transition-all">
                                                 <span className="text-xl">{cat.emoji}</span>
                                                 <span className="text-xs font-medium">{cat.label}</span>
