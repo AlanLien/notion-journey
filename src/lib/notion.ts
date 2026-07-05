@@ -45,6 +45,7 @@ export interface ExpenseItem {
     amount: number;
     currency: string; // 'TWD' or configured foreign currency
     category: string; // reuses journey select
+    payer: string;
     description: string;
 }
 
@@ -300,11 +301,12 @@ export const getTripData = cache(async () => {
             amount: page.properties.amount?.number ?? 0,
             currency: page.properties.currency?.select?.name || 'TWD',
             category: normalizeJourneyCategory(page.properties.journey?.select?.name),
+            payer: getPlainText(getProperty(page.properties, ['payer', 'Payer', 'paid_by', 'paid by', 'Paid By', '付款人'])) || '未指定',
             description: page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
                 .join('') || '',
         }))
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return { metadata, itinerary, tasks, expenses };
 });

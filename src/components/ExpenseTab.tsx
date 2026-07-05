@@ -23,6 +23,10 @@ function getCategoryInfo(value: string) {
     return EXPENSE_CATEGORIES.find(c => c.value === value) || EXPENSE_CATEGORIES[5];
 }
 
+function getPayerInitial(name: string) {
+    return name.trim().slice(0, 1).toUpperCase() || '?';
+}
+
 // ─── Sub-components defined OUTSIDE to avoid remount on every render ───────────
 
 function AddExpenseSubmitButton() {
@@ -242,21 +246,30 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
         return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     };
 
-    const total = expenses.reduce((sum, e) => sum + convert(e.amount, e.currency), 0);
+    const sortedExpenses = [...expenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const total = sortedExpenses.reduce((sum, e) => sum + convert(e.amount, e.currency), 0);
 
-    const grouped = expenses.reduce((acc, item) => {
+    const grouped = sortedExpenses.reduce((acc, item) => {
         const date = item.date.slice(0, 10);
         if (!acc[date]) acc[date] = [];
         acc[date].push(item);
         return acc;
     }, {} as Record<string, ExpenseItem[]>);
-    const groupDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+    const groupDates = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
 
-    const categoryTotals = expenses.reduce((acc, e) => {
+    const categoryTotals = sortedExpenses.reduce((acc, e) => {
         acc[e.category] = (acc[e.category] || 0) + convert(e.amount, e.currency);
         return acc;
     }, {} as Record<string, number>);
-    const topCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a).slice(0, 3);
+    const sortedCategoryTotals = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a);
+    const topCategories = sortedCategoryTotals.slice(0, 3);
+
+    const payerTotals = sortedExpenses.reduce((acc, e) => {
+        const payer = e.payer || '未指定';
+        acc[payer] = (acc[payer] || 0) + convert(e.amount, e.currency);
+        return acc;
+    }, {} as Record<string, number>);
+    const sortedPayerTotals = Object.entries(payerTotals).sort(([, a], [, b]) => b - a);
 
     return (
         <div className="pb-32 pt-4 px-4 relative min-h-full">
@@ -294,6 +307,53 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                     </div>
                 )}
             </div>
+
+            {expenses.length > 0 && (
+                <div className="mb-5 space-y-3">
+                    <section className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-slate-700">付款人小計</h3>
+                            <span className="text-xs font-semibold text-slate-400">{displayCurrency}</span>
+                        </div>
+                        <div className="space-y-2.5">
+                            {sortedPayerTotals.map(([payer, amount]) => (
+                                <div key={payer} className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-7 h-7 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center text-xs font-black shrink-0">
+                                            {getPayerInitial(payer)}
+                                        </div>
+                                        <span className="text-sm font-semibold text-slate-700 truncate">{payer}</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-slate-900">{fmtAmt(amount)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-slate-700">類別小計</h3>
+                            <span className="text-xs font-semibold text-slate-400">{displayCurrency}</span>
+                        </div>
+                        <div className="space-y-2.5">
+                            {sortedCategoryTotals.map(([cat, amount]) => {
+                                const catInfo = getCategoryInfo(cat);
+                                return (
+                                    <div key={cat} className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0", catInfo.color)}>
+                                                {catInfo.emoji}
+                                            </div>
+                                            <span className="text-sm font-semibold text-slate-700 truncate">{catInfo.label}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-900">{fmtAmt(amount)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {/* Expense List */}
             {expenses.length === 0 ? (
@@ -333,7 +393,9 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-semibold text-slate-800 truncate">{item.title}</p>
                                                     <p className="text-xs text-slate-400 mt-0.5">
-                                                        {isConverted
+                                                        {item.payer && item.payer !== '未指定'
+                                                            ? `${item.payer}${isConverted ? ` · 原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}` : item.description ? ` · ${item.description}` : ''}`
+                                                            : isConverted
                                                             ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
                                                             : item.description || ''
                                                         }
