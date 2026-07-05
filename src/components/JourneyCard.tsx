@@ -84,6 +84,13 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [displayReserved, setDisplayReserved] = useState(item.reserved);
     const [reservedValue, setReservedValue] = useState(normalizeReservedValue(item.reserved));
     const reservedClass = displayReserved ? RESERVED_COLORS[displayReserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
+    const canShowTimeEditor = isAuthenticated || !!displayTime;
+
+    const startEditingInfoTime = () => {
+        if (!isAuthenticated) return;
+        setTimeValue(displayTime || '00:00');
+        setEditingInfoTime(true);
+    };
 
     const fetchBlocks = async () => {
         if (blocks) return;
@@ -315,9 +322,9 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                             )}
                         </div>
 
-                        {(displayTime || displayReserved) && (
+                        {(canShowTimeEditor || displayReserved) && (
                             <div className="mb-6 grid grid-cols-1 gap-2">
-                                {displayTime && (
+                                {canShowTimeEditor && (
                                     editingInfoTime ? (
                                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
                                             <div className="flex items-center gap-2">
@@ -350,14 +357,19 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                     ) : (
                                         <button
                                             type="button"
-                                            onClick={() => isAuthenticated && setEditingInfoTime(true)}
+                                            onClick={startEditingInfoTime}
                                             className={cn(
                                                 "w-full flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 text-left",
                                                 isAuthenticated && "hover:border-blue-200 hover:bg-blue-50/50 transition-colors"
                                             )}
                                         >
                                             <Clock3 size={15} className="text-slate-400" />
-                                            <span className="font-semibold text-slate-700 flex-1">{displayTime}</span>
+                                            <span className={cn(
+                                                "font-semibold flex-1",
+                                                displayTime ? "text-slate-700" : "text-slate-400"
+                                            )}>
+                                                {displayTime || '未設定時間'}
+                                            </span>
                                             {isAuthenticated && <Pencil size={13} className="text-slate-300" />}
                                         </button>
                                     )
