@@ -144,6 +144,12 @@ export const getTripData = cache(async () => {
         if (property.select) {
             return property.select.name || '';
         }
+        if (property.people) {
+            return property.people
+                .map((person: any) => person.name || person.person?.email || '')
+                .filter(Boolean)
+                .join('、');
+        }
         if (property.date?.start) {
             return property.date.start;
         }

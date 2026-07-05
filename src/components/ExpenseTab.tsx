@@ -262,7 +262,6 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
         return acc;
     }, {} as Record<string, number>);
     const sortedCategoryTotals = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a);
-    const topCategories = sortedCategoryTotals.slice(0, 3);
 
     const payerTotals = sortedExpenses.reduce((acc, e) => {
         const payer = e.payer || '未指定';
@@ -293,24 +292,11 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                         1 {foreignCurrency} ≈ {(1 / twdRate).toFixed(2)} TWD
                     </p>
                 )}
-                {topCategories.length > 0 && (
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                        {topCategories.map(([cat, amount]) => {
-                            const catInfo = getCategoryInfo(cat);
-                            return (
-                                <div key={cat} className="flex items-center gap-1.5 bg-white/20 rounded-xl px-3 py-1.5">
-                                    <span className="text-sm">{catInfo.emoji}</span>
-                                    <span className="text-xs font-semibold">{fmtAmt(amount)}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
             </div>
 
             {expenses.length > 0 && (
                 <div className="mb-5 space-y-3">
-                    <section className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
+                    <section className="bg-slate-50 rounded-2xl px-4 py-3.5 shadow-sm border border-slate-200/70">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-bold text-slate-700">付款人小計</h3>
                             <span className="text-xs font-semibold text-slate-400">{displayCurrency}</span>
@@ -330,7 +316,7 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                         </div>
                     </section>
 
-                    <section className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
+                    <section className="bg-slate-50 rounded-2xl px-4 py-3.5 shadow-sm border border-slate-200/70">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-bold text-slate-700">類別小計</h3>
                             <span className="text-xs font-semibold text-slate-400">{displayCurrency}</span>
