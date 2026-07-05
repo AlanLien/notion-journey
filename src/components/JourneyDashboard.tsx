@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { format, parseISO, isSameDay, isBefore, startOfDay, addDays } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { ChevronDown, Calendar } from 'lucide-react';
+import { ChevronDown, Calendar, CalendarCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { TripMetadata, ItineraryItem, TaskItem, ExpenseItem } from '@/lib/notion';
@@ -41,6 +41,11 @@ const toSortableJourneyTime = (item: ItineraryItem): number => {
     const { date } = parseNotionDateTime(item.date);
     const time = item.time?.match(/\d{1,2}:\d{2}/)?.[0];
     return parseISO(time ? `${date} ${time}` : parseNotionDateTime(item.date).dateTimeStr).getTime();
+};
+
+const isNotYetReserved = (reserved: string) => {
+    const normalized = reserved.toLowerCase();
+    return normalized.includes('not yet') || normalized.includes('not');
 };
 
 export default function JourneyDashboard({ data, requiredPassword, isAuthenticated }: JourneyDashboardProps) {
@@ -266,8 +271,52 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         </div>
     );
 
+    const renderReservations = () => {
+        const pendingReservations = sortedJourneys.filter(item => isNotYetReserved(item.reserved));
+
+        return (
+            <div className="pb-8 pt-4 px-4">
+                {pendingReservations.length === 0 ? (
+                    <div className="p-8 pb-32 flex flex-col items-center justify-center text-center text-slate-500 space-y-4">
+                        <CalendarCheck size={48} className="text-slate-300" />
+                        <p>目前沒有待預訂項目</p>
+                    </div>
+                ) : (
+                    pendingReservations.reduce((groups, item) => {
+                        const { date } = parseNotionDateTime(item.date);
+                        const lastGroup = groups[groups.length - 1];
+                        if (lastGroup && lastGroup.date === date) {
+                            lastGroup.items.push(item);
+                        } else {
+                            groups.push({ date, items: [item] });
+                        }
+                        return groups;
+                    }, [] as { date: string, items: typeof pendingReservations }[]).map((group) => (
+                        <div key={group.date} className="mb-8 last:mb-0">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center gap-2">
+                                    <Calendar size={14} className="text-slate-400" />
+                                    <span className="text-sm font-bold text-slate-700">
+                                        {format(parseISO(group.date), 'MM/dd EEEE', { locale: zhTW })}
+                                    </span>
+                                </div>
+                                <div className="h-px bg-slate-200/60 flex-1" />
+                            </div>
+
+                            <div className="space-y-3">
+                                {group.items.map(item => (
+                                    <JourneyCard key={item.id} item={item} isAuthenticated={isAuthenticated} />
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        );
+    };
+
     // Swipe Logic
-    const TABS: TabType[] = ['home', 'visit', 'hotel', 'transport', 'tasks', 'expense', 'info'];
+    const TABS: TabType[] = ['home', 'visit', 'hotel', 'transport', 'tasks', 'expense', 'reservations'];
     const minSwipeDistance = 50;
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -387,7 +436,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                                             isAuthenticated={isAuthenticated}
                                         />
                                     )}
-                                    {activeTab === 'info' && renderInfo()}
+                                    {activeTab === 'reservations' && renderReservations()}
                                 </motion.div>
                             </AnimatePresence>
                         </div>
