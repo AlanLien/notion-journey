@@ -35,6 +35,7 @@ const RESERVED_COLORS: Record<string, string> = {
 };
 
 const RESERVED_OPTIONS = ['Reserved', 'Not Yet', 'No Need'];
+const PAYER_OPTIONS = ['Ruei Han Lee', '連子勻'];
 
 const normalizeReservedValue = (value: string) => {
     const normalized = value.toLowerCase();
@@ -43,6 +44,13 @@ const normalizeReservedValue = (value: string) => {
     if (normalized.includes('no need')) return 'No Need';
     return value || 'Reserved';
 };
+
+const parsePayers = (value: string) => value
+    .split(/[、,]/)
+    .map(payer => payer.trim())
+    .filter(Boolean);
+
+const formatPayers = (payers: string[]) => payers.join('、');
 
 interface JourneyCardProps {
     item: ItineraryItem;
@@ -89,7 +97,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [reservedValue, setReservedValue] = useState(normalizeReservedValue(item.reserved));
     const [amountValue, setAmountValue] = useState(item.amount?.toString() || '');
     const [currencyValue, setCurrencyValue] = useState(item.currency || 'TWD');
-    const [payerValue, setPayerValue] = useState(item.payer || '');
+    const [payerValue, setPayerValue] = useState<string[]>(parsePayers(item.payer || ''));
     const reservedClass = displayReserved ? RESERVED_COLORS[displayReserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
     const canShowTimeEditor = isAuthenticated || !!displayTime;
     const canShowExpenseEditor = isAuthenticated || displayAmount !== null || !!displayPayer;
@@ -179,11 +187,12 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
         setSavingInfo(true);
         setSaveError(null);
         try {
-            const result = await updateJourneyExpenseInfoAction(item.id, amountValue, currencyValue, payerValue);
+            const nextPayer = formatPayers(payerValue);
+            const result = await updateJourneyExpenseInfoAction(item.id, amountValue, currencyValue, nextPayer);
             if (result.success) {
                 setDisplayAmount(amountValue.trim() ? parseFloat(amountValue) : null);
                 setDisplayCurrency(currencyValue);
-                setDisplayPayer(payerValue.trim());
+                setDisplayPayer(nextPayer);
                 setEditingExpense(false);
             } else {
                 setSaveError(result.message || '儲存失敗');
@@ -477,13 +486,32 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                                     ))}
                                                 </select>
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={payerValue}
-                                                onChange={(e) => setPayerValue(e.target.value)}
-                                                placeholder="paid by"
-                                                className="w-full px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm"
-                                            />
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {PAYER_OPTIONS.map(option => {
+                                                    const checked = payerValue.includes(option);
+                                                    return (
+                                                        <label key={option} className={cn(
+                                                            "cursor-pointer rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
+                                                            checked
+                                                                ? "border-blue-300 bg-white text-blue-700 shadow-sm"
+                                                                : "border-blue-100 bg-white/70 text-slate-500"
+                                                        )}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={(e) => {
+                                                                    setPayerValue(prev => e.target.checked
+                                                                        ? [...prev, option]
+                                                                        : prev.filter(value => value !== option)
+                                                                    );
+                                                                }}
+                                                                className="sr-only"
+                                                            />
+                                                            {option}
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={handleSaveExpense}
@@ -498,7 +526,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                                         setEditingExpense(false);
                                                         setAmountValue(displayAmount?.toString() || '');
                                                         setCurrencyValue(displayCurrency);
-                                                        setPayerValue(displayPayer);
+                                                        setPayerValue(parsePayers(displayPayer));
                                                         setSaveError(null);
                                                     }}
                                                     disabled={savingInfo}
@@ -515,7 +543,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                                 if (!isAuthenticated) return;
                                                 setAmountValue(displayAmount?.toString() || '');
                                                 setCurrencyValue(displayCurrency);
-                                                setPayerValue(displayPayer);
+                                                setPayerValue(parsePayers(displayPayer));
                                                 setEditingExpense(true);
                                             }}
                                             className={cn(
