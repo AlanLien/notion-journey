@@ -408,9 +408,13 @@ function getEditablePropertyName(properties: Record<string, any>, names: string[
 }
 
 async function resolvePeopleProperty(notion: Client, property: any, payer: string) {
+    const payerAliases: Record<string, string> = {
+        'Ruei Han Lee': 'Lee Ruei Han',
+    };
     const names = payer
         .split(/[、,]/)
         .map(name => name.trim())
+        .map(name => payerAliases[name] || name)
         .filter(Boolean);
 
     if (property?.type === 'rich_text') {
