@@ -12,7 +12,7 @@ const CATEGORIES = [
     { value: '🛒 shopping', label: '購物', emoji: '🛒' },
     { value: '🏠 hotel', label: '住宿', emoji: '🏠' },
     { value: '🚗 transport', label: '交通', emoji: '🚗' },
-    { value: 'other', label: '其他', emoji: '📌' },
+    { value: '📌 other', label: '其他', emoji: '📌' },
 ];
 
 function SubmitButton() {

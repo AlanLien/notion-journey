@@ -29,6 +29,9 @@ export interface ItineraryItem {
     description: string;
     hasContent: boolean;
     icon?: string | null;
+    amount: number | null;
+    currency: string;
+    payer: string;
 }
 
 export interface TaskItem {
@@ -145,8 +148,11 @@ export const getTripData = cache(async () => {
         if (property.select) {
             return property.select.name || '';
         }
-        if (property.people && Array.isArray(property.people)) {
-            return property.people.map((p: any) => p.name).filter(Boolean).join(', ');
+        if (property.people) {
+            return property.people
+                .map((person: any) => person.name || person.person?.email || '')
+                .filter(Boolean)
+                .join('、');
         }
         if (property.date?.start) {
             return property.date.start;
@@ -272,6 +278,9 @@ export const getTripData = cache(async () => {
                 description: description,
                 hasContent: true,
                 icon,
+                amount: typeof page.properties.amount?.number === 'number' ? page.properties.amount.number : null,
+                currency: page.properties.currency?.select?.name || 'TWD',
+                payer: getPlainText(getProperty(page.properties, ['payer', 'Payer', 'paid_by', 'paid by', 'Paid By', '付款人'])) || '',
             };
         })
         .sort((a, b) => getSortDate(a) - getSortDate(b));
@@ -305,7 +314,7 @@ export const getTripData = cache(async () => {
             amount: page.properties.amount?.number ?? 0,
             currency: page.properties.currency?.select?.name || 'TWD',
             category: normalizeJourneyCategory(page.properties.journey?.select?.name),
-            payer: getPlainText(getProperty(page.properties, ['Payer', 'payer', 'Paid By', 'paid by', '付款人', '支付者', '付款'])) || '未指定',
+            payer: getPlainText(getProperty(page.properties, ['Payer', 'payer', 'Paid By', 'paid by', 'paid_by', '付款人', '支付者', '付款'])) || '未指定',
             description: page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
                 .join('') || '',
@@ -388,6 +397,54 @@ function getNotionClient() {
     const databaseId = process.env.NOTION_DATABASE_ID;
     if (!apiKey || !databaseId) throw new Error('Missing Notion credentials');
     return { notion: new Client({ auth: apiKey }), databaseId };
+}
+
+function getEditablePropertyName(properties: Record<string, any>, names: string[], label: string) {
+    const propertyName = findPropertyName(properties, names);
+    if (!propertyName) {
+        throw new Error(`找不到 ${label} 欄位`);
+    }
+    return propertyName;
+}
+
+async function resolvePeopleProperty(notion: Client, property: any, payer: string) {
+    const names = payer
+        .split(/[、,]/)
+        .map(name => name.trim())
+        .filter(Boolean);
+
+    if (property?.type === 'rich_text') {
+        return { rich_text: [{ text: { content: payer } }] };
+    }
+    if (property?.type === 'select') {
+        return payer ? { select: { name: payer } } : { select: null };
+    }
+    if (property?.type !== 'people') {
+        throw new Error(`paid by 欄位目前是 ${property?.type || '未知'} 類型，APP 只能更新 People、文字或 Select 類型`);
+    }
+
+    if (names.length === 0) return { people: [] };
+
+    const users: any[] = [];
+    let startCursor: string | undefined;
+    do {
+        const response = await notion.users.list({ start_cursor: startCursor });
+        users.push(...(response.results as any[]));
+        startCursor = response.has_more ? response.next_cursor || undefined : undefined;
+    } while (startCursor);
+
+    const people = names.map(name => {
+        const user = users.find(u =>
+            u.name?.toLowerCase() === name.toLowerCase()
+            || u.person?.email?.toLowerCase() === name.toLowerCase()
+        );
+        if (!user) {
+            throw new Error(`找不到 Notion 使用者：${name}`);
+        }
+        return { id: user.id };
+    });
+
+    return { people };
 }
 
 export interface CreateJourneyData {
@@ -477,6 +534,38 @@ export async function updateJourneyReserved(pageId: string, reserved: string) {
         page_id: pageId,
         properties: {
             [propertyName]: { select: { name: reserved } },
+        },
+    });
+}
+
+export interface UpdateJourneyExpenseInfoData {
+    amount: number | null;
+    currency: string;
+    payer: string;
+}
+
+export async function updateJourneyExpenseInfo(pageId: string, data: UpdateJourneyExpenseInfoData) {
+    const { notion } = getNotionClient();
+    const page = await notion.pages.retrieve({ page_id: pageId }) as any;
+    const properties = page.properties || {};
+
+    const amountPropertyName = getEditablePropertyName(properties, ['amount', 'Amount'], 'amount');
+    const currencyPropertyName = getEditablePropertyName(properties, ['currency', 'Currency'], 'currency');
+    const payerPropertyName = getEditablePropertyName(properties, ['Payer', 'payer', 'Paid By', 'paid by', 'paid_by', '付款人', '支付者', '付款'], 'paid by');
+
+    if (properties[amountPropertyName]?.type !== 'number') {
+        throw new Error('amount 欄位必須是 Number 類型');
+    }
+    if (properties[currencyPropertyName]?.type !== 'select') {
+        throw new Error('currency 欄位必須是 Select 類型');
+    }
+
+    return notion.pages.update({
+        page_id: pageId,
+        properties: {
+            [amountPropertyName]: { number: data.amount },
+            [currencyPropertyName]: data.currency ? { select: { name: data.currency } } : { select: null },
+            [payerPropertyName]: await resolvePeopleProperty(notion, properties[payerPropertyName], data.payer),
         },
     });
 }

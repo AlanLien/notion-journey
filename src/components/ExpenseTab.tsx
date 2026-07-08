@@ -423,9 +423,11 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="text-sm font-semibold text-slate-800 truncate">{item.title}</p>
                                                                 <p className="text-xs text-slate-400 mt-0.5">
-                                                                    {isConverted
-                                                                        ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
-                                                                        : item.description || ''
+                                                                    {item.payer && item.payer !== '未指定'
+                                                                        ? `${item.payer}${isConverted ? ` · 原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}` : item.description ? ` · ${item.description}` : ''}`
+                                                                        : isConverted
+                                                                            ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
+                                                                            : item.description || ''
                                                                     }
                                                                 </p>
                                                             </div>

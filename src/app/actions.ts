@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { getPasswordConfig, createJourneyEntry, updateJourneyDate, updateJourneyTime, updateJourneyReserved, createTask, updateTaskDone, createExpense } from '@/lib/notion';
+import { getPasswordConfig, createJourneyEntry, updateJourneyDate, updateJourneyTime, updateJourneyReserved, updateJourneyExpenseInfo, createTask, updateTaskDone, createExpense } from '@/lib/notion';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,27 @@ export async function updateJourneyReservedAction(pageId: string, reserved: stri
         return { success: true };
     } catch (e: any) {
         console.error('updateJourneyReservedAction error:', e);
+        return { success: false, message: e.message || '更新失敗' };
+    }
+}
+
+export async function updateJourneyExpenseInfoAction(pageId: string, amountStr: string, currency: string, payer: string) {
+    const amount = amountStr.trim() ? parseFloat(amountStr) : null;
+    if (amount !== null && (isNaN(amount) || amount < 0)) {
+        return { success: false, message: '請輸入有效金額' };
+    }
+    if (!currency?.trim()) return { success: false, message: '請選擇幣別' };
+
+    try {
+        await updateJourneyExpenseInfo(pageId, {
+            amount,
+            currency: currency.trim(),
+            payer: payer.trim(),
+        });
+        revalidatePath('/');
+        return { success: true };
+    } catch (e: any) {
+        console.error('updateJourneyExpenseInfoAction error:', e);
         return { success: false, message: e.message || '更新失敗' };
     }
 }

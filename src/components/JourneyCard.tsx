@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Plane, Hotel, MapPin, Utensils, ShoppingBag, Info, ExternalLink, Pencil, Check, Loader2, Clock3 } from 'lucide-react';
+import { Plane, Hotel, MapPin, Utensils, ShoppingBag, Info, ExternalLink, Pencil, Check, Loader2, Clock3, Wallet } from 'lucide-react';
 import { ItineraryItem } from '@/lib/notion';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { NotionBlockRenderer } from '@/components/NotionBlockRenderer';
-import { updateJourneyDateAction, updateJourneyReservedAction, updateJourneyTimeAction } from '@/app/actions';
+import { updateJourneyDateAction, updateJourneyExpenseInfoAction, updateJourneyReservedAction, updateJourneyTimeAction } from '@/app/actions';
 
 // Mapping category strings (from Notion select) to Icons
 const TYPE_ICONS: Record<string, any> = {
@@ -35,6 +35,7 @@ const RESERVED_COLORS: Record<string, string> = {
 };
 
 const RESERVED_OPTIONS = ['Reserved', 'Not Yet', 'No Need'];
+const PAYER_OPTIONS = ['Ruei Han Lee', '連子勻'];
 
 const normalizeReservedValue = (value: string) => {
     const normalized = value.toLowerCase();
@@ -43,6 +44,13 @@ const normalizeReservedValue = (value: string) => {
     if (normalized.includes('no need')) return 'No Need';
     return value || 'Reserved';
 };
+
+const parsePayers = (value: string) => value
+    .split(/[、,]/)
+    .map(payer => payer.trim())
+    .filter(Boolean);
+
+const formatPayers = (payers: string[]) => payers.join('、');
 
 interface JourneyCardProps {
     item: ItineraryItem;
@@ -77,13 +85,29 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
     const [saveError, setSaveError] = useState<string | null>(null);
     const [editingInfoTime, setEditingInfoTime] = useState(false);
     const [editingReserved, setEditingReserved] = useState(false);
+    const [editingExpense, setEditingExpense] = useState(false);
     const [savingInfo, setSavingInfo] = useState(false);
     // Local display override after save
     const [displayDate, setDisplayDate] = useState(item.date);
     const [displayTime, setDisplayTime] = useState(item.time);
     const [displayReserved, setDisplayReserved] = useState(item.reserved);
+    const [displayAmount, setDisplayAmount] = useState<number | null>(item.amount);
+    const [displayCurrency, setDisplayCurrency] = useState(item.currency || 'TWD');
+    const [displayPayer, setDisplayPayer] = useState(item.payer || '');
     const [reservedValue, setReservedValue] = useState(normalizeReservedValue(item.reserved));
+    const [amountValue, setAmountValue] = useState(item.amount?.toString() || '');
+    const [currencyValue, setCurrencyValue] = useState(item.currency || 'TWD');
+    const [payerValue, setPayerValue] = useState<string[]>(parsePayers(item.payer || ''));
     const reservedClass = displayReserved ? RESERVED_COLORS[displayReserved] || 'bg-slate-50 text-slate-600 border-slate-100' : '';
+    const canShowTimeEditor = isAuthenticated || !!displayTime;
+    const canShowExpenseEditor = isAuthenticated || displayAmount !== null || !!displayPayer;
+    const currencyOptions = Array.from(new Set([displayCurrency, 'USD', 'TWD'].filter(Boolean)));
+
+    const startEditingInfoTime = () => {
+        if (!isAuthenticated) return;
+        setTimeValue(displayTime || '00:00');
+        setEditingInfoTime(true);
+    };
 
     const fetchBlocks = async () => {
         if (blocks) return;
@@ -159,10 +183,30 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
         }
     };
 
+    const handleSaveExpense = async () => {
+        setSavingInfo(true);
+        setSaveError(null);
+        try {
+            const nextPayer = formatPayers(payerValue);
+            const result = await updateJourneyExpenseInfoAction(item.id, amountValue, currencyValue, nextPayer);
+            if (result.success) {
+                setDisplayAmount(amountValue.trim() ? parseFloat(amountValue) : null);
+                setDisplayCurrency(currencyValue);
+                setDisplayPayer(nextPayer);
+                setEditingExpense(false);
+            } else {
+                setSaveError(result.message || '儲存失敗');
+            }
+        } catch (e: any) {
+            setSaveError(e.message || '儲存失敗');
+        } finally {
+            setSavingInfo(false);
+        }
+    };
+
     const dateObj = parseISO(displayDate);
     const timeStr = displayTime || format(dateObj, 'HH:mm');
     const dateStr = format(dateObj, 'yyyy-MM-dd');
-    const canEditTime = isAuthenticated || !!displayTime;
 
     return (
         <div className={cn(
@@ -187,6 +231,7 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                     setEditingSchedule(false);
                     setEditingInfoTime(false);
                     setEditingReserved(false);
+                    setEditingExpense(false);
                     setSaveError(null);
                 }
             }}>
@@ -316,9 +361,9 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                             )}
                         </div>
 
-                        {(canEditTime || displayReserved) && (
+                        {(canShowTimeEditor || displayReserved || canShowExpenseEditor) && (
                             <div className="mb-6 grid grid-cols-1 gap-2">
-                                {canEditTime && (
+                                {canShowTimeEditor && (
                                     editingInfoTime ? (
                                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
                                             <div className="flex items-center gap-2">
@@ -351,15 +396,18 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                     ) : (
                                         <button
                                             type="button"
-                                            onClick={() => isAuthenticated && setEditingInfoTime(true)}
+                                            onClick={startEditingInfoTime}
                                             className={cn(
                                                 "w-full flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 text-left",
                                                 isAuthenticated && "hover:border-blue-200 hover:bg-blue-50/50 transition-colors"
                                             )}
                                         >
                                             <Clock3 size={15} className="text-slate-400" />
-                                            <span className={cn("font-semibold flex-1", displayTime ? "text-slate-700" : "text-slate-400")}>
-                                                {displayTime || '設定時間'}
+                                            <span className={cn(
+                                                "font-semibold flex-1",
+                                                displayTime ? "text-slate-700" : "text-slate-400"
+                                            )}>
+                                                {displayTime || '未設定時間'}
                                             </span>
                                             {isAuthenticated && <Pencil size={13} className="text-slate-300" />}
                                         </button>
@@ -410,6 +458,112 @@ export const JourneyCard: React.FC<JourneyCardProps> = ({ item, isPast = false, 
                                                     {displayReserved}
                                                 </span>
                                                 {isAuthenticated && <Pencil size={13} className="text-slate-300" />}
+                                            </span>
+                                        </button>
+                                    )
+                                )}
+                                {canShowExpenseEditor && (
+                                    editingExpense ? (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                                            <div className="grid grid-cols-[1fr_auto] gap-2">
+                                                <input
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    min="0"
+                                                    step="any"
+                                                    value={amountValue}
+                                                    onChange={(e) => setAmountValue(e.target.value)}
+                                                    placeholder="Amount"
+                                                    className="w-full min-w-0 px-3 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-bold"
+                                                />
+                                                <select
+                                                    value={currencyValue}
+                                                    onChange={(e) => setCurrencyValue(e.target.value)}
+                                                    className="w-24 px-2 py-2 rounded-lg bg-white border border-blue-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm font-semibold"
+                                                >
+                                                    {currencyOptions.map(option => (
+                                                        <option key={option} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {PAYER_OPTIONS.map(option => {
+                                                    const checked = payerValue.includes(option);
+                                                    return (
+                                                        <label key={option} className={cn(
+                                                            "cursor-pointer rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
+                                                            checked
+                                                                ? "border-blue-300 bg-white text-blue-700 shadow-sm"
+                                                                : "border-blue-100 bg-white/70 text-slate-500"
+                                                        )}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={(e) => {
+                                                                    setPayerValue(prev => e.target.checked
+                                                                        ? [...prev, option]
+                                                                        : prev.filter(value => value !== option)
+                                                                    );
+                                                                }}
+                                                                className="sr-only"
+                                                            />
+                                                            {option}
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={handleSaveExpense}
+                                                    disabled={savingInfo}
+                                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold disabled:opacity-60"
+                                                >
+                                                    {savingInfo ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                                    {savingInfo ? '儲存中...' : '儲存'}
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingExpense(false);
+                                                        setAmountValue(displayAmount?.toString() || '');
+                                                        setCurrencyValue(displayCurrency);
+                                                        setPayerValue(parsePayers(displayPayer));
+                                                        setSaveError(null);
+                                                    }}
+                                                    disabled={savingInfo}
+                                                    className="px-4 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold"
+                                                >
+                                                    取消
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (!isAuthenticated) return;
+                                                setAmountValue(displayAmount?.toString() || '');
+                                                setCurrencyValue(displayCurrency);
+                                                setPayerValue(parsePayers(displayPayer));
+                                                setEditingExpense(true);
+                                            }}
+                                            className={cn(
+                                                "w-full flex items-center justify-between gap-3 text-sm bg-white border border-slate-100 rounded-xl px-3 py-2 text-left",
+                                                isAuthenticated && "hover:border-blue-200 hover:bg-blue-50/50 transition-colors"
+                                            )}
+                                        >
+                                            <span className="inline-flex items-center gap-2 text-slate-500">
+                                                <Wallet size={15} className="text-slate-400" />
+                                                Expense
+                                            </span>
+                                            <span className="inline-flex items-center gap-2 min-w-0">
+                                                <span className={cn(
+                                                    "font-bold truncate",
+                                                    displayAmount !== null ? "text-slate-800" : "text-slate-400"
+                                                )}>
+                                                    {displayAmount !== null ? `${displayAmount.toLocaleString('en', { maximumFractionDigits: 2 })} ${displayCurrency}` : '未設定'}
+                                                </span>
+                                                {displayPayer && <span className="text-xs text-slate-400 truncate max-w-20">{displayPayer}</span>}
+                                                {isAuthenticated && <Pencil size={13} className="text-slate-300 shrink-0" />}
                                             </span>
                                         </button>
                                     )
