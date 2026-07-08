@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useActionState, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { Plus, X, Receipt, Utensils, ShoppingBag, MapPin, Plane, HelpCircle, Wallet, ArrowLeftRight, Loader2 } from 'lucide-react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { Plus, X, Receipt, Utensils, ShoppingBag, MapPin, Plane, HelpCircle, Wallet, ArrowLeftRight, Loader2, ChevronDown } from 'lucide-react';
+import { useFormStatus } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { createExpenseAction } from '@/app/actions';
 import { ExpenseItem } from '@/lib/notion';
 import { cn } from '@/lib/utils';
+import { TripMemoryBanner } from './TripMemoryBanner';
 
 const EXPENSE_CATEGORIES = [
     { value: 'restaurant', label: '餐飲', emoji: '🍜', color: 'bg-orange-100 text-orange-600' },
@@ -21,6 +23,13 @@ const EXPENSE_CATEGORIES = [
 
 function getCategoryInfo(value: string) {
     return EXPENSE_CATEGORIES.find(c => c.value === value) || EXPENSE_CATEGORIES[5];
+}
+
+function getPayerBadge(payer: string) {
+    const trimmed = payer.trim() || '未指定';
+    if (trimmed === '未指定') return '未';
+    const firstLatin = trimmed.match(/[A-Za-z]/)?.[0];
+    return firstLatin?.toUpperCase() || trimmed[0];
 }
 
 // ─── Sub-components defined OUTSIDE to avoid remount on every render ───────────
@@ -201,11 +210,19 @@ interface ExpenseTabProps {
 
 export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: foreignCurrency, isAuthenticated }) => {
     const [showAddForm, setShowAddForm] = useState(false);
-    const [state, formAction] = useFormState(createExpenseAction, null);
+    const [state, formAction] = useActionState(createExpenseAction, null);
     const [displayCurrency, setDisplayCurrency] = useState<string>(foreignCurrency);
     const [twdRate, setTwdRate] = useState<number | null>(null);
     const [rateLoading, setRateLoading] = useState(false);
     const [formCurrency, setFormCurrency] = useState<string>(foreignCurrency);
+    const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+
+    const toggleDay = (dateStr: string) => {
+        setExpandedDays(prev => ({
+            ...prev,
+            [dateStr]: !prev[dateStr]
+        }));
+    };
 
     useEffect(() => {
         if (state?.success) setShowAddForm(false);
@@ -250,16 +267,25 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
         acc[date].push(item);
         return acc;
     }, {} as Record<string, ExpenseItem[]>);
-    const groupDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+    const groupDates = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+
+    const payerTotals = expenses.reduce((acc, e) => {
+        const payer = e.payer || '未指定';
+        acc[payer] = (acc[payer] || 0) + convert(e.amount, e.currency);
+        return acc;
+    }, {} as Record<string, number>);
+    const payerRows = Object.entries(payerTotals).sort(([, a], [, b]) => b - a);
 
     const categoryTotals = expenses.reduce((acc, e) => {
         acc[e.category] = (acc[e.category] || 0) + convert(e.amount, e.currency);
         return acc;
     }, {} as Record<string, number>);
-    const topCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a).slice(0, 3);
+    const categoryRows = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a);
 
     return (
         <div className="pb-32 pt-4 px-4 relative min-h-full">
+            <TripMemoryBanner imageSrc="/couple/walk-square.jpg" className="mx-0" />
+
             {/* Total Card */}
             <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-3xl p-5 mb-5 text-white shadow-lg shadow-amber-200">
                 <div className="flex items-center justify-between mb-1">
@@ -280,20 +306,54 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                         1 {foreignCurrency} ≈ {(1 / twdRate).toFixed(2)} TWD
                     </p>
                 )}
-                {topCategories.length > 0 && (
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                        {topCategories.map(([cat, amount]) => {
+            </div>
+
+            {payerRows.length > 0 && (
+                <div className="bg-white/80 border border-slate-100 rounded-3xl p-5 mb-5 shadow-sm shadow-slate-200/70">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-bold text-slate-700">付款人小計</h3>
+                        <span className="text-sm font-bold text-slate-400">{displayCurrency}</span>
+                    </div>
+                    <div className="space-y-4">
+                        {payerRows.map(([payer, amount]) => (
+                            <div key={payer} className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 text-sm font-black">
+                                        {getPayerBadge(payer)}
+                                    </div>
+                                    <span className="text-base font-bold text-slate-700 truncate">{payer}</span>
+                                </div>
+                                <span className="text-lg font-black text-slate-900 tabular-nums">{fmtAmt(amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {categoryRows.length > 0 && (
+                <div className="bg-white/80 border border-slate-100 rounded-3xl p-5 mb-5 shadow-sm shadow-slate-200/70">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-bold text-slate-700">類別小計</h3>
+                        <span className="text-sm font-bold text-slate-400">{displayCurrency}</span>
+                    </div>
+                    <div className="space-y-4">
+                        {categoryRows.map(([cat, amount]) => {
                             const catInfo = getCategoryInfo(cat);
                             return (
-                                <div key={cat} className="flex items-center gap-1.5 bg-white/20 rounded-xl px-3 py-1.5">
-                                    <span className="text-sm">{catInfo.emoji}</span>
-                                    <span className="text-xs font-semibold">{fmtAmt(amount)}</span>
+                                <div key={cat} className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-lg", catInfo.color)}>
+                                            {catInfo.emoji}
+                                        </div>
+                                        <span className="text-base font-bold text-slate-700 truncate">{catInfo.label}</span>
+                                    </div>
+                                    <span className="text-lg font-black text-slate-900 tabular-nums">{fmtAmt(amount)}</span>
                                 </div>
                             );
                         })}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Expense List */}
             {expenses.length === 0 ? (
@@ -303,50 +363,83 @@ export const ExpenseTab: React.FC<ExpenseTabProps> = ({ expenses, currency: fore
                     {isAuthenticated && <p className="text-xs text-slate-300">點右下角 + 新增</p>}
                 </div>
             ) : (
-                <div className="space-y-6">
+                <div className="space-y-4">
                     {groupDates.map(dateStr => {
                         const dayItems = grouped[dateStr];
                         const dayTotal = dayItems.reduce((s, i) => s + convert(i.amount, i.currency), 0);
+                        const isExpanded = !!expandedDays[dateStr];
                         return (
-                            <div key={dateStr}>
-                                <div className="flex items-center justify-between mb-3">
+                            <div
+                                key={dateStr}
+                                className={cn(
+                                    "rounded-2xl transition-all duration-300 overflow-hidden border shadow-sm",
+                                    isExpanded ? "bg-white/60 border-amber-100 shadow-md" : "bg-white/40 border-white/60 hover:bg-white/60"
+                                )}
+                            >
+                                <button
+                                    onClick={() => toggleDay(dateStr)}
+                                    className="w-full p-4 flex items-center justify-between text-left focus:outline-none"
+                                >
                                     <div className="flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                        <div className={cn(
+                                            "w-1.5 h-1.5 rounded-full transition-colors",
+                                            isExpanded ? "bg-amber-500" : "bg-slate-400"
+                                        )} />
                                         <span className="text-sm font-bold text-slate-600">
                                             {format(parseISO(dateStr), 'MM/dd EEE', { locale: zhTW })}
                                         </span>
                                     </div>
-                                    <span className="text-sm font-bold text-amber-600">
-                                        {fmtAmt(dayTotal)} {displayCurrency}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {dayItems.map(item => {
-                                        const catInfo = getCategoryInfo(item.category);
-                                        const displayAmount = convert(item.amount, item.currency);
-                                        const isConverted = item.currency !== displayCurrency;
-                                        return (
-                                            <div key={item.id} className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
-                                                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg", catInfo.color)}>
-                                                    {catInfo.emoji}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-slate-800 truncate">{item.title}</p>
-                                                    <p className="text-xs text-slate-400 mt-0.5">
-                                                        {isConverted
-                                                            ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
-                                                            : item.description || ''
-                                                        }
-                                                    </p>
-                                                </div>
-                                                <div className="text-right shrink-0">
-                                                    <p className="text-base font-bold text-slate-800">{fmtAmt(displayAmount)}</p>
-                                                    <p className="text-[10px] text-slate-400">{displayCurrency}</p>
-                                                </div>
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="text-sm font-bold text-amber-600">
+                                            {fmtAmt(dayTotal)} {displayCurrency}
+                                        </span>
+                                        <div className={cn(
+                                            "p-0.5 rounded-full transition-transform duration-300 text-slate-400",
+                                            isExpanded ? "bg-amber-50 text-amber-500 rotate-180" : ""
+                                        )}>
+                                            <ChevronDown size={16} />
+                                        </div>
+                                    </div>
+                                </button>
+                                <AnimatePresence initial={false}>
+                                    {isExpanded && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2, ease: "easeInOut" }}
+                                        >
+                                            <div className="px-4 pb-4 pt-0 space-y-2 border-t border-slate-100/50 mt-1">
+                                                <div className="h-1.5" />
+                                                {dayItems.map(item => {
+                                                    const catInfo = getCategoryInfo(item.category);
+                                                    const displayAmount = convert(item.amount, item.currency);
+                                                    const isConverted = item.currency !== displayCurrency;
+                                                    return (
+                                                        <div key={item.id} className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-slate-100">
+                                                            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg", catInfo.color)}>
+                                                                {catInfo.emoji}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-semibold text-slate-800 truncate">{item.title}</p>
+                                                                <p className="text-xs text-slate-400 mt-0.5">
+                                                                    {isConverted
+                                                                        ? `原始 ${item.currency === 'TWD' ? item.amount.toLocaleString('zh-TW', { maximumFractionDigits: 0 }) : item.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ${item.currency}`
+                                                                        : item.description || ''
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right shrink-0">
+                                                                <p className="text-base font-bold text-slate-800">{fmtAmt(displayAmount)}</p>
+                                                                <p className="text-[10px] text-slate-400">{displayCurrency}</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         );
                     })}

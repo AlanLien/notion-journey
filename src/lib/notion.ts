@@ -45,7 +45,31 @@ export interface ExpenseItem {
     amount: number;
     currency: string; // 'TWD' or configured foreign currency
     category: string; // reuses journey select
+    payer: string;
     description: string;
+}
+
+function normalizeJourneyCategory(categoryName?: string | null): string {
+    const normalized = (categoryName || '').toLowerCase();
+
+    if (normalized.includes('mission')) return 'mission';
+    if (normalized.includes('restaurant')) return 'restaurant';
+    if (normalized.includes('shopping')) return 'shopping';
+    if (normalized.includes('transport')) return 'transport';
+    if (normalized.includes('hotel')) return 'hotel';
+    if (normalized.includes('visit')) return 'visit';
+    if (normalized.includes('other')) return 'other';
+
+    return categoryName || 'other';
+}
+
+function findPropertyName(properties: Record<string, any>, names: string[]) {
+    for (const name of names) {
+        if (properties[name]) return name;
+    }
+
+    const lowerNames = names.map(name => name.toLowerCase());
+    return Object.keys(properties).find(key => lowerNames.includes(key.toLowerCase()));
 }
 
 /**
@@ -104,10 +128,47 @@ export const getTripData = cache(async () => {
 
     const { dataSourceId, dbIcon } = await getDataSourceId(notion, databaseId);
 
-    const getRichText = (property: any): string => {
-        return property?.rich_text
-            ?.map((t: any) => t.plain_text)
-            .join('') || '';
+    const getProperty = (properties: Record<string, any>, names: string[]) => {
+        const propertyName = findPropertyName(properties, names);
+        return propertyName ? properties[propertyName] : undefined;
+    };
+
+    const getPlainText = (property: any): string => {
+        if (!property) return '';
+
+        if (property.rich_text) {
+            return property.rich_text.map((t: any) => t.plain_text).join('');
+        }
+        if (property.title) {
+            return property.title.map((t: any) => t.plain_text).join('');
+        }
+        if (property.select) {
+            return property.select.name || '';
+        }
+        if (property.people && Array.isArray(property.people)) {
+            return property.people.map((p: any) => p.name).filter(Boolean).join(', ');
+        }
+        if (property.date?.start) {
+            return property.date.start;
+        }
+        if (typeof property.number === 'number') {
+            return String(property.number);
+        }
+        if (property.formula) {
+            const formula = property.formula;
+            if (formula.type === 'string') return formula.string || '';
+            if (formula.type === 'number') return typeof formula.number === 'number' ? String(formula.number) : '';
+            if (formula.type === 'date') return formula.date?.start || '';
+            if (formula.type === 'boolean') return formula.boolean ? 'true' : 'false';
+        }
+
+        return '';
+    };
+
+    const getSortDate = (item: ItineraryItem) => {
+        const dateOnly = item.date.split('T')[0];
+        const timeOnly = item.time.match(/\d{1,2}:\d{2}/)?.[0];
+        return new Date(timeOnly ? `${dateOnly}T${timeOnly}` : item.date).getTime();
     };
 
     // Notion API v2025-09-03: dataSources.query
@@ -169,7 +230,7 @@ export const getTripData = cache(async () => {
     // 2. 行程：找出 Type = 'journey' 的項目，排除 mission（任務）
     const itinerary: ItineraryItem[] = results
         .filter(r => r.properties.type?.select?.name === 'journey')
-        .filter(r => r.properties.journey?.select?.name !== 'mission')
+        .filter(r => normalizeJourneyCategory(r.properties.journey?.select?.name) !== 'mission')
         .filter(r => r.properties.date?.date?.start)
         .map(page => {
             let coverUrl = null;
@@ -181,7 +242,7 @@ export const getTripData = cache(async () => {
                 }
             }
 
-            const category = page.properties.journey?.select?.name || 'other';
+            const category = normalizeJourneyCategory(page.properties.journey?.select?.name);
 
             const description = page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
@@ -204,8 +265,8 @@ export const getTripData = cache(async () => {
                 title: page.properties.title?.title[0]?.plain_text || '未命名項目',
                 category: category,
                 date: page.properties.date?.date?.start || '',
-                time: getRichText(page.properties.Time),
-                reserved: page.properties.Reserved?.select?.name || '',
+                time: getPlainText(getProperty(page.properties, ['Time', 'time'])),
+                reserved: getProperty(page.properties, ['Reserved', 'reserved'])?.select?.name || '',
                 maps: page.properties.maps?.url || '',
                 img: coverUrl,
                 description: description,
@@ -213,11 +274,11 @@ export const getTripData = cache(async () => {
                 icon,
             };
         })
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => getSortDate(a) - getSortDate(b));
 
     // 3. 任務：找出 type='journey' 且 journey='mission' 的項目
     const tasks: TaskItem[] = results
-        .filter(r => r.properties.type?.select?.name === 'journey' && r.properties.journey?.select?.name === 'mission')
+        .filter(r => r.properties.type?.select?.name === 'journey' && normalizeJourneyCategory(r.properties.journey?.select?.name) === 'mission')
         .map(page => ({
             id: page.id,
             title: page.properties.title?.title[0]?.plain_text || '未命名任務',
@@ -243,12 +304,13 @@ export const getTripData = cache(async () => {
             date: page.properties.date?.date?.start || '',
             amount: page.properties.amount?.number ?? 0,
             currency: page.properties.currency?.select?.name || 'TWD',
-            category: page.properties.journey?.select?.name || 'other',
+            category: normalizeJourneyCategory(page.properties.journey?.select?.name),
+            payer: getPlainText(getProperty(page.properties, ['Payer', 'payer', 'Paid By', 'paid by', '付款人', '支付者', '付款'])) || '未指定',
             description: page.properties.description?.rich_text
                 ?.map((t: any) => t.plain_text)
                 .join('') || '',
         }))
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return { metadata, itinerary, tasks, expenses };
 });
@@ -289,15 +351,35 @@ export const getPageBlocks = cache(async (pageId: string) => {
     const notion = new Client({ auth: apiKey });
 
     try {
-        const response = await notion.blocks.children.list({
-            block_id: pageId,
-        });
-        return response.results;
+        return await getBlockChildrenRecursive(notion, pageId);
     } catch (error: any) {
         console.error("Notion getPageBlocks Error:", error);
         throw error;
     }
 });
+
+async function getBlockChildrenRecursive(notion: Client, blockId: string): Promise<any[]> {
+    const children: any[] = [];
+    let startCursor: string | undefined;
+
+    do {
+        const response = await notion.blocks.children.list({
+            block_id: blockId,
+            start_cursor: startCursor,
+        });
+
+        for (const block of response.results as any[]) {
+            if (block.has_children) {
+                block.children = await getBlockChildrenRecursive(notion, block.id);
+            }
+            children.push(block);
+        }
+
+        startCursor = response.has_more ? response.next_cursor || undefined : undefined;
+    } while (startCursor);
+
+    return children;
+}
 
 // ─── Write Functions ──────────────────────────────────────────────────────────
 
@@ -347,6 +429,58 @@ export async function updateJourneyDate(pageId: string, newDate: string) {
     });
 }
 
+export async function updateJourneyTime(pageId: string, newTime: string) {
+    const { notion } = getNotionClient();
+    const page = await notion.pages.retrieve({ page_id: pageId }) as any;
+    const propertyName = findPropertyName(page.properties || {}, ['Time', 'time']);
+
+    if (!propertyName) {
+        throw new Error('找不到 Time/time 欄位');
+    }
+
+    const property = page.properties[propertyName];
+    const type = property?.type;
+
+    if (type === 'rich_text') {
+        return notion.pages.update({
+            page_id: pageId,
+            properties: {
+                [propertyName]: { rich_text: [{ text: { content: newTime } }] },
+            },
+        });
+    }
+
+    if (type === 'date') {
+        const dateStart = page.properties.date?.date?.start || new Date().toISOString().slice(0, 10);
+        const dateOnly = dateStart.split('T')[0];
+        return notion.pages.update({
+            page_id: pageId,
+            properties: {
+                [propertyName]: { date: { start: `${dateOnly}T${newTime}:00` } },
+            },
+        });
+    }
+
+    throw new Error(`Time 欄位目前是 ${type || '未知'} 類型，APP 只能更新文字或日期類型`);
+}
+
+export async function updateJourneyReserved(pageId: string, reserved: string) {
+    const { notion } = getNotionClient();
+    const page = await notion.pages.retrieve({ page_id: pageId }) as any;
+    const propertyName = findPropertyName(page.properties || {}, ['Reserved', 'reserved']);
+
+    if (!propertyName) {
+        throw new Error('找不到 Reserved/reserved 欄位');
+    }
+
+    return notion.pages.update({
+        page_id: pageId,
+        properties: {
+            [propertyName]: { select: { name: reserved } },
+        },
+    });
+}
+
 export interface CreateTaskData {
     title: string;
     date?: string;
@@ -376,6 +510,16 @@ export async function updateTaskDone(pageId: string, done: boolean) {
         page_id: pageId,
         properties: {
             done: { checkbox: done },
+        },
+    });
+}
+
+export async function updateToDoBlock(blockId: string, checked: boolean) {
+    const { notion } = getNotionClient();
+    return notion.blocks.update({
+        block_id: blockId,
+        to_do: {
+            checked,
         },
     });
 }

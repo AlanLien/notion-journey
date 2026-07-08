@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useOptimistic, useTransition, useEffect } from 'react';
+import React, { useActionState, useState, useOptimistic, useTransition, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { CheckSquare, Square, Plus, X, Calendar } from 'lucide-react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { createTaskAction, toggleTaskDoneAction } from '@/app/actions';
 import { TaskItem } from '@/lib/notion';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ export const TasksTab: React.FC<TasksTabProps> = ({ tasks, isAuthenticated }) =>
     );
     const [, startTransition] = useTransition();
     const [showAddForm, setShowAddForm] = useState(false);
-    const [state, formAction] = useFormState(createTaskAction, null);
+    const [state, formAction] = useActionState(createTaskAction, null);
 
     useEffect(() => {
         if (state?.success) setShowAddForm(false);

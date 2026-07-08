@@ -1,13 +1,89 @@
-import React from 'react';
-import { cn } from '@/lib/utils';
-import { CheckSquare, Navigation, Phone, Square } from 'lucide-react';
+'use client';
 
-export const renderBlockContent = (block: any) => {
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { CheckSquare, Loader2, Navigation, Phone, Square } from 'lucide-react';
+
+interface RenderOptions {
+    editable?: boolean;
+}
+
+const ToDoBlock = ({ block, value, renderRichText, renderChildren, editable = false }: {
+    block: any;
+    value: any;
+    renderRichText: (textArr: any[]) => React.ReactNode;
+    renderChildren: (className?: string) => React.ReactNode;
+    editable?: boolean;
+}) => {
+    const [checked, setChecked] = useState(!!value.checked);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleToggle = async () => {
+        if (!editable || saving) return;
+
+        const nextChecked = !checked;
+        setChecked(nextChecked);
+        setSaving(true);
+        setError(null);
+
+        try {
+            const res = await fetch(`/api/notion/block/${block.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ checked: nextChecked }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || '更新失敗');
+            }
+        } catch (e: any) {
+            setChecked(!nextChecked);
+            setError(e.message || '更新失敗');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="mb-2">
+            <div className="flex items-start gap-2 text-slate-700">
+                <button
+                    type="button"
+                    onClick={handleToggle}
+                    disabled={!editable || saving}
+                    className={cn(
+                        "mt-0.5 shrink-0 transition-all",
+                        editable && "active:scale-95 hover:scale-105",
+                        !editable && "cursor-default"
+                    )}
+                    aria-label={checked ? '取消勾選' : '勾選'}
+                >
+                    {saving ? (
+                        <Loader2 size={18} className="animate-spin text-slate-400" />
+                    ) : checked ? (
+                        <CheckSquare size={18} className="text-emerald-500" />
+                    ) : (
+                        <Square size={18} className="text-slate-400" />
+                    )}
+                </button>
+                <div className={cn("leading-relaxed", checked && "text-slate-400 line-through")}>
+                    {renderRichText(value.rich_text)}
+                </div>
+            </div>
+            {error && <p className="ml-7 mt-1 text-xs text-red-500">{error}</p>}
+            {renderChildren("ml-7 mt-1 space-y-1")}
+        </div>
+    );
+};
+
+export const renderBlockContent = (block: any, options: RenderOptions = {}) => {
     if (!block) return null;
     const type = block.type;
     const value = block[type];
 
-    if (!value) return null;
+    if (!value && !block.children?.length) return null;
 
     // Helper for rich text
     const renderRichText = (textArr: any[]) => {
@@ -27,6 +103,19 @@ export const renderBlockContent = (block: any) => {
                 </span>
             );
         });
+    };
+
+    const renderChildren = (className = "mt-2 space-y-1") => {
+        if (!block.children?.length) return null;
+        return (
+            <div className={className}>
+                {block.children.map((child: any) => (
+                    <React.Fragment key={child.id}>
+                        {renderBlockContent(child, options)}
+                    </React.Fragment>
+                ))}
+            </div>
+        );
     };
 
     switch (type) {
@@ -64,55 +153,92 @@ export const renderBlockContent = (block: any) => {
             }
 
             return (
-                <div className="flex items-center gap-2 mb-2">
-                    <p className="text-slate-700 leading-relaxed max-w-full overflow-hidden text-ellipsis">
-                        {renderRichText(displayRichText)}
-                    </p>
+                <div className="mb-2">
+                    <div className="flex items-center gap-2">
+                        <p className="text-slate-700 leading-relaxed max-w-full overflow-hidden text-ellipsis">
+                            {renderRichText(displayRichText)}
+                        </p>
 
-                    {/* Address Navigation Button */}
-                    {isAddress && addressUrl && (
-                        <a
-                            href={addressUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
-                        >
-                            <Navigation size={16} />
-                        </a>
-                    )}
+                        {/* Address Navigation Button */}
+                        {isAddress && addressUrl && (
+                            <a
+                                href={addressUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+                            >
+                                <Navigation size={16} />
+                            </a>
+                        )}
 
-                    {/* Phone Call Button */}
-                    {isPhone && phoneUrl && (
-                        <a
-                            href={phoneUrl}
-                            className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 transition-colors"
-                        >
-                            <Phone size={16} />
-                        </a>
-                    )}
+                        {/* Phone Call Button */}
+                        {isPhone && phoneUrl && (
+                            <a
+                                href={phoneUrl}
+                                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 transition-colors"
+                            >
+                                <Phone size={16} />
+                            </a>
+                        )}
+                    </div>
+                    {renderChildren()}
                 </div>
             );
         case 'heading_1':
-            return <h1 className="text-2xl font-bold mt-4 mb-2 text-slate-900">{renderRichText(value.rich_text)}</h1>;
+            return (
+                <div>
+                    <h1 className="text-2xl font-bold mt-4 mb-2 text-slate-900">{renderRichText(value.rich_text)}</h1>
+                    {renderChildren()}
+                </div>
+            );
         case 'heading_2':
-            return <h2 className="text-xl font-bold mt-3 mb-2 text-slate-800">{renderRichText(value.rich_text)}</h2>;
+            return (
+                <div>
+                    <h2 className="text-xl font-bold mt-3 mb-2 text-slate-800">{renderRichText(value.rich_text)}</h2>
+                    {renderChildren()}
+                </div>
+            );
         case 'heading_3':
-            return <h3 className="text-lg font-bold mt-2 mb-1 text-slate-800">{renderRichText(value.rich_text)}</h3>;
+            return (
+                <div>
+                    <h3 className="text-lg font-bold mt-2 mb-1 text-slate-800">{renderRichText(value.rich_text)}</h3>
+                    {renderChildren()}
+                </div>
+            );
         case 'bulleted_list_item':
-            return <li className="ml-4 list-disc mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>;
+            return (
+                <div>
+                    <li className="ml-4 list-disc mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>
+                    {renderChildren("ml-4 mt-1 space-y-1")}
+                </div>
+            );
         case 'numbered_list_item':
-            return <li className="ml-4 list-decimal mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>;
+            return (
+                <div>
+                    <li className="ml-4 list-decimal mb-1 text-slate-700">{renderRichText(value.rich_text)}</li>
+                    {renderChildren("ml-4 mt-1 space-y-1")}
+                </div>
+            );
         case 'to_do':
             return (
-                <div className="flex items-start gap-2 mb-2 text-slate-700">
-                    {value.checked ? (
-                        <CheckSquare size={18} className="mt-0.5 shrink-0 text-emerald-500" />
-                    ) : (
-                        <Square size={18} className="mt-0.5 shrink-0 text-slate-400" />
-                    )}
-                    <div className={cn("leading-relaxed", value.checked && "text-slate-400 line-through")}>
-                        {renderRichText(value.rich_text)}
-                    </div>
+                <ToDoBlock
+                    block={block}
+                    value={value}
+                    renderRichText={renderRichText}
+                    renderChildren={renderChildren}
+                    editable={!!options.editable}
+                />
+            );
+        case 'column_list':
+            return (
+                <div className="my-3 grid grid-cols-1 gap-3">
+                    {renderChildren("space-y-3")}
+                </div>
+            );
+        case 'column':
+            return (
+                <div className="rounded-xl bg-slate-50/70 border border-slate-100 p-3">
+                    {renderChildren("space-y-1")}
                 </div>
             );
         case 'image':
@@ -123,34 +249,42 @@ export const renderBlockContent = (block: any) => {
                 </div>
             );
         case 'quote':
-            return <blockquote className="border-l-4 border-slate-300 pl-4 py-1 my-2 italic text-slate-600 bg-slate-50">{renderRichText(value.rich_text)}</blockquote>;
+            return (
+                <div>
+                    <blockquote className="border-l-4 border-slate-300 pl-4 py-1 my-2 italic text-slate-600 bg-slate-50">{renderRichText(value.rich_text)}</blockquote>
+                    {renderChildren()}
+                </div>
+            );
         case 'divider':
             return <hr className="my-6 border-slate-200" />;
         case 'callout':
             return (
                 <div className="p-3 bg-slate-50 rounded-lg flex items-start gap-3 my-2 border border-slate-100">
                     {value.icon?.emoji && <span className="text-lg">{value.icon.emoji}</span>}
-                    <div className="text-slate-700">{renderRichText(value.rich_text)}</div>
+                    <div className="text-slate-700">
+                        {renderRichText(value.rich_text)}
+                        {renderChildren()}
+                    </div>
                 </div>
             );
         default:
-            // Unsupported block type fallback
-            return null;
+            return renderChildren();
     }
 };
 
 interface NotionBlockRendererProps {
     blocks: any[];
+    editable?: boolean;
 }
 
-export const NotionBlockRenderer: React.FC<NotionBlockRendererProps> = ({ blocks }) => {
+export const NotionBlockRenderer: React.FC<NotionBlockRendererProps> = ({ blocks, editable = false }) => {
     if (!blocks || blocks.length === 0) return null;
 
     return (
         <div className="space-y-1">
             {blocks.map((block) => (
                 <React.Fragment key={block.id}>
-                    {renderBlockContent(block)}
+                    {renderBlockContent(block, { editable })}
                 </React.Fragment>
             ))}
         </div>

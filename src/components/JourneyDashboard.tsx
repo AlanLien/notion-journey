@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { format, parseISO, isSameDay, isBefore, startOfDay, addDays } from 'date-fns';
+import { differenceInCalendarDays, format, parseISO, isSameDay, isBefore } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { ChevronDown, Calendar } from 'lucide-react';
+import { ChevronDown, Calendar, CalendarCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { TripMetadata, ItineraryItem, TaskItem, ExpenseItem } from '@/lib/notion';
@@ -19,6 +19,7 @@ import { PullToRefresh } from './PullToRefresh';
 import { AddJourneyModal } from './AddJourneyModal';
 import { TasksTab } from './TasksTab';
 import { ExpenseTab } from './ExpenseTab';
+import { TripMemoryBanner } from './TripMemoryBanner';
 
 interface JourneyDashboardProps {
     data: {
@@ -37,6 +38,19 @@ const toFloatingDate = (dateStr: string): Date => {
     return parseISO(dateTimeStr);
 };
 
+const toSortableJourneyTime = (item: ItineraryItem): number => {
+    const { date } = parseNotionDateTime(item.date);
+    const time = item.time?.match(/\d{1,2}:\d{2}/)?.[0];
+    return parseISO(time ? `${date} ${time}` : parseNotionDateTime(item.date).dateTimeStr).getTime();
+};
+
+const isNotYetReserved = (reserved: string) => {
+    const normalized = reserved.toLowerCase();
+    return normalized.includes('not yet') || normalized.includes('not');
+};
+
+const TRIP_TITLE = '2026 Summer US Trip';
+
 export default function JourneyDashboard({ data, requiredPassword, isAuthenticated }: JourneyDashboardProps) {
     const { metadata, itinerary, tasks, expenses } = data;
 
@@ -50,7 +64,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
 
     const sortedJourneys = useMemo(() =>
         [...itinerary].sort((a, b) => {
-            return toFloatingDate(a.date).getTime() - toFloatingDate(b.date).getTime();
+            return toSortableJourneyTime(a) - toSortableJourneyTime(b);
         }),
         [itinerary]);
 
@@ -66,6 +80,16 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
     }, [sortedJourneys]);
 
     const allDates = useMemo(() => Object.keys(groupedJourneys).sort(), [groupedJourneys]);
+    const tripStartDate = useMemo(() => {
+        if (metadata.startDate) return parseNotionDateTime(metadata.startDate).date;
+        return allDates[0] || '';
+    }, [allDates, metadata.startDate]);
+
+    const getTripDayNumber = (dateStr: string) => {
+        if (!tripStartDate) return 1;
+        const dayNumber = differenceInCalendarDays(parseISO(dateStr), parseISO(tripStartDate)) + 1;
+        return dayNumber > 0 ? dayNumber : 1;
+    };
 
     useEffect(() => {
         if (!now) return;
@@ -94,6 +118,8 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
     const renderHome = () => {
         return (
             <div className="pb-8 pt-4">
+                <TripMemoryBanner />
+
                 {/* Widgets Row */}
                 <div className="mx-4 mb-6 flex gap-4 h-28">
                     <div className="w-full">
@@ -105,11 +131,12 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
 
                 {/* The List Logic */}
                 <div className="px-4 space-y-4">
-                    {allDates.map((dateStr, index) => {
+                    {allDates.map((dateStr) => {
                         const isExpanded = !!expandedDays[dateStr];
                         const dayItems = groupedJourneys[dateStr];
                         const dateObj = parseISO(dateStr);
                         const isToday = now ? isSameDay(dateObj, now) : false;
+                        const tripDayNumber = getTripDayNumber(dateStr);
 
                         return (
                             <div
@@ -129,7 +156,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                                                 "text-xs font-bold uppercase tracking-widest",
                                                 isToday ? "text-blue-600" : "text-slate-400"
                                             )}>
-                                                第 {index + 1} 天
+                                                第 {tripDayNumber} 天
                                             </span>
                                             {isToday && (
                                                 <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -260,8 +287,52 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         </div>
     );
 
+    const renderReservations = () => {
+        const pendingReservations = sortedJourneys.filter(item => isNotYetReserved(item.reserved));
+
+        return (
+            <div className="pb-8 pt-4 px-4">
+                {pendingReservations.length === 0 ? (
+                    <div className="p-8 pb-32 flex flex-col items-center justify-center text-center text-slate-500 space-y-4">
+                        <CalendarCheck size={48} className="text-slate-300" />
+                        <p>目前沒有待預訂項目</p>
+                    </div>
+                ) : (
+                    pendingReservations.reduce((groups, item) => {
+                        const { date } = parseNotionDateTime(item.date);
+                        const lastGroup = groups[groups.length - 1];
+                        if (lastGroup && lastGroup.date === date) {
+                            lastGroup.items.push(item);
+                        } else {
+                            groups.push({ date, items: [item] });
+                        }
+                        return groups;
+                    }, [] as { date: string, items: typeof pendingReservations }[]).map((group) => (
+                        <div key={group.date} className="mb-8 last:mb-0">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center gap-2">
+                                    <Calendar size={14} className="text-slate-400" />
+                                    <span className="text-sm font-bold text-slate-700">
+                                        {format(parseISO(group.date), 'MM/dd EEEE', { locale: zhTW })}
+                                    </span>
+                                </div>
+                                <div className="h-px bg-slate-200/60 flex-1" />
+                            </div>
+
+                            <div className="space-y-3">
+                                {group.items.map(item => (
+                                    <JourneyCard key={item.id} item={item} isAuthenticated={isAuthenticated} />
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        );
+    };
+
     // Swipe Logic
-    const TABS: TabType[] = ['home', 'visit', 'hotel', 'transport', 'tasks', 'expense', 'info'];
+    const TABS: TabType[] = ['home', 'visit', 'hotel', 'transport', 'tasks', 'expense', 'reservations'];
     const minSwipeDistance = 50;
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -336,7 +407,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-blue-100 flex justify-center">
             <div className="w-full max-w-[768px] h-[100dvh] bg-[#F8FAFC] shadow-2xl relative overflow-hidden transition-colors duration-300">
                 <TopBar
-                    title={metadata.city ? `${metadata.title} - ${metadata.city}` : metadata.title}
+                    title={TRIP_TITLE}
                     gmtOffset={metadata.timezone || '+9'}
                     subtitle={
                         metadata.startDate && metadata.endDate
@@ -381,7 +452,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                                             isAuthenticated={isAuthenticated}
                                         />
                                     )}
-                                    {activeTab === 'info' && renderInfo()}
+                                    {activeTab === 'reservations' && renderReservations()}
                                 </motion.div>
                             </AnimatePresence>
                         </div>

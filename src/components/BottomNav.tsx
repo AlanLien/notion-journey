@@ -1,8 +1,8 @@
 import React from 'react';
-import { Home, MapPin, Bed, Plane, Info, CheckSquare, Wallet } from 'lucide-react';
+import { Home, MapPin, Bed, Plane, CalendarCheck, CheckSquare, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type TabType = 'home' | 'itinerary' | 'visit' | 'hotel' | 'transport' | 'tasks' | 'expense' | 'info';
+export type TabType = 'home' | 'itinerary' | 'visit' | 'hotel' | 'transport' | 'tasks' | 'expense' | 'reservations';
 
 interface BottomNavProps {
     currentTab: TabType;
@@ -17,7 +17,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange })
         { id: 'transport', label: '交通', icon: Plane },
         { id: 'tasks', label: '任務', icon: CheckSquare },
         { id: 'expense', label: '記帳', icon: Wallet },
-        { id: 'info', label: '資訊', icon: Info },
+        { id: 'reservations', label: '預訂', icon: CalendarCheck },
     ];
 
     return (

@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-// @ts-ignore
-import { useFormState, useFormStatus } from 'react-dom';
+import React, { useActionState, useEffect, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { verifyPasswordAction } from '@/app/actions';
 import { Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -36,7 +35,7 @@ function SubmitButton() {
 }
 
 export default function PasswordProtection() {
-    const [state, formAction] = useFormState(verifyPasswordAction, initialState);
+    const [state, formAction] = useActionState(verifyPasswordAction, initialState);
     const router = useRouter();
     const [password, setPassword] = useState('');
 
