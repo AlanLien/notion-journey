@@ -51,10 +51,42 @@ const isNotYetReserved = (reserved: string) => {
 
 const TRIP_TITLE = '2026 Summer US Trip';
 
+const splitPhases = (phase: string) => phase
+    .split(/[、,]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+const PHASE_COLOR_CLASSES: Record<string, string> = {
+    default: 'border-slate-200 bg-slate-100 text-slate-700',
+    gray: 'border-slate-200 bg-slate-100 text-slate-700',
+    brown: 'border-stone-200 bg-stone-100 text-stone-700',
+    orange: 'border-orange-200 bg-orange-100 text-orange-700',
+    yellow: 'border-yellow-200 bg-yellow-100 text-yellow-800',
+    green: 'border-emerald-200 bg-emerald-100 text-emerald-700',
+    blue: 'border-blue-200 bg-blue-100 text-blue-700',
+    purple: 'border-purple-200 bg-purple-100 text-purple-700',
+    pink: 'border-pink-200 bg-pink-100 text-pink-700',
+    red: 'border-red-200 bg-red-100 text-red-700',
+};
+
+const ACTIVE_PHASE_COLOR_CLASSES: Record<string, string> = {
+    default: 'border-slate-400 bg-slate-700 text-white',
+    gray: 'border-slate-400 bg-slate-700 text-white',
+    brown: 'border-stone-400 bg-stone-700 text-white',
+    orange: 'border-orange-400 bg-orange-600 text-white',
+    yellow: 'border-yellow-400 bg-yellow-500 text-white',
+    green: 'border-emerald-400 bg-emerald-600 text-white',
+    blue: 'border-blue-400 bg-blue-600 text-white',
+    purple: 'border-purple-400 bg-purple-600 text-white',
+    pink: 'border-pink-400 bg-pink-600 text-white',
+    red: 'border-red-400 bg-red-600 text-white',
+};
+
 export default function JourneyDashboard({ data, requiredPassword, isAuthenticated }: JourneyDashboardProps) {
     const { metadata, itinerary, tasks, expenses } = data;
 
     const [activeTab, setActiveTab] = useState<TabType>('home');
+    const [activePhase, setActivePhase] = useState('all');
     const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
     const [now, setNow] = useState<Date | null>(null);
 
@@ -68,22 +100,50 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         }),
         [itinerary]);
 
+    const phaseOptions = useMemo(() => {
+        const phases = sortedJourneys
+            .flatMap(item => splitPhases(item.phase || ''));
+        return Array.from(new Set(phases));
+    }, [sortedJourneys]);
+
+    const getPhaseColor = (phase: string) => {
+        if (phase === 'all') return 'blue';
+
+        for (const item of sortedJourneys) {
+            const color = item.phaseColors?.[phase];
+            if (color) return color;
+        }
+
+        return 'default';
+    };
+
+    const homeJourneys = useMemo(() => {
+        if (activePhase === 'all') return sortedJourneys;
+        return sortedJourneys.filter(item => splitPhases(item.phase || '').includes(activePhase));
+    }, [activePhase, sortedJourneys]);
+
     const groupedJourneys = useMemo(() => {
         const groups: Record<string, ItineraryItem[]> = {};
-        sortedJourneys.forEach(item => {
+        homeJourneys.forEach(item => {
             const { date } = parseNotionDateTime(item.date);
             if (!date) return;
             if (!groups[date]) groups[date] = [];
             groups[date].push(item);
         });
         return groups;
-    }, [sortedJourneys]);
+    }, [homeJourneys]);
 
     const allDates = useMemo(() => Object.keys(groupedJourneys).sort(), [groupedJourneys]);
+    const itineraryDates = useMemo(() => {
+        const dates = sortedJourneys
+            .map(item => parseNotionDateTime(item.date).date)
+            .filter(Boolean);
+        return Array.from(new Set(dates)).sort();
+    }, [sortedJourneys]);
     const tripStartDate = useMemo(() => {
         if (metadata.startDate) return parseNotionDateTime(metadata.startDate).date;
-        return allDates[0] || '';
-    }, [allDates, metadata.startDate]);
+        return itineraryDates[0] || '';
+    }, [itineraryDates, metadata.startDate]);
 
     const getTripDayNumber = (dateStr: string) => {
         if (!tripStartDate) return 1;
@@ -120,6 +180,39 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
             <div className="pb-8 pt-4">
                 <TripMemoryBanner />
 
+                {phaseOptions.length > 0 && (
+                    <div className="mx-4 mb-5 rounded-2xl bg-white/80 border border-white/70 shadow-sm shadow-slate-200/60 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-black tracking-widest text-slate-400 uppercase">旅遊階段</p>
+                            <span className="text-xs font-bold text-slate-400">
+                                {activePhase === 'all' ? `${phaseOptions.length} 個階段` : '篩選中'}
+                            </span>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                            {['all', ...phaseOptions].map((phase) => {
+                                const isActive = activePhase === phase;
+                                return (
+                                    <button
+                                        key={phase}
+                                        type="button"
+                                        onClick={() => setActivePhase(phase)}
+                                        className={cn(
+                                            "shrink-0 rounded-full border px-3 py-2 text-sm font-bold transition-all",
+                                            isActive
+                                                ? `${ACTIVE_PHASE_COLOR_CLASSES[getPhaseColor(phase)] || ACTIVE_PHASE_COLOR_CLASSES.default} shadow-sm`
+                                                : phase === 'all'
+                                                    ? "border-slate-200 bg-white text-slate-500"
+                                                    : PHASE_COLOR_CLASSES[getPhaseColor(phase)] || PHASE_COLOR_CLASSES.default
+                                        )}
+                                    >
+                                        {phase === 'all' ? '全部' : phase}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Widgets Row */}
                 <div className="mx-4 mb-6 flex gap-4 h-28">
                     <div className="w-full">
@@ -131,12 +224,20 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
 
                 {/* The List Logic */}
                 <div className="px-4 space-y-4">
+                    {allDates.length === 0 && (
+                        <div className="text-center py-16 text-slate-400">
+                            <p>這個階段目前沒有行程。</p>
+                        </div>
+                    )}
                     {allDates.map((dateStr) => {
                         const isExpanded = !!expandedDays[dateStr];
                         const dayItems = groupedJourneys[dateStr];
                         const dateObj = parseISO(dateStr);
                         const isToday = now ? isSameDay(dateObj, now) : false;
                         const tripDayNumber = getTripDayNumber(dateStr);
+                        const dayPhases = Array.from(new Set(
+                            dayItems.flatMap(item => splitPhases(item.phase || ''))
+                        ));
 
                         return (
                             <div
@@ -151,13 +252,24 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                                     className="w-full p-4 flex items-center justify-between"
                                 >
                                     <div className="text-left">
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex flex-wrap items-center gap-2 mb-1">
                                             <span className={cn(
                                                 "text-xs font-bold uppercase tracking-widest",
                                                 isToday ? "text-blue-600" : "text-slate-400"
                                             )}>
                                                 第 {tripDayNumber} 天
                                             </span>
+                                            {dayPhases.map(phase => (
+                                                <span
+                                                    key={phase}
+                                                    className={cn(
+                                                        "rounded-full border px-2 py-0.5 text-[10px] font-bold",
+                                                        PHASE_COLOR_CLASSES[getPhaseColor(phase)] || PHASE_COLOR_CLASSES.default
+                                                    )}
+                                                >
+                                                    {phase}
+                                                </span>
+                                            ))}
                                             {isToday && (
                                                 <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
                                                     今天
@@ -221,11 +333,13 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         );
     };
 
-    const renderFiltered = (filterType: string | 'visit_group') => {
+    const renderFiltered = (filterType: string | 'visit_group' | 'stay_transport') => {
         let filteredItems = sortedJourneys;
 
         if (filterType === 'visit_group') {
             filteredItems = sortedJourneys.filter(j => ['visit', 'shopping', 'restaurant'].includes(j.category));
+        } else if (filterType === 'stay_transport') {
+            filteredItems = sortedJourneys.filter(j => ['hotel', 'transport'].includes(j.category));
         } else {
             filteredItems = sortedJourneys.filter(j => j.category === filterType);
         }
@@ -332,7 +446,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
     };
 
     // Swipe Logic
-    const TABS: TabType[] = ['home', 'visit', 'hotel', 'transport', 'tasks', 'expense', 'reservations'];
+    const TABS: TabType[] = ['home', 'stay_transport', 'tasks', 'expense', 'reservations'];
     const minSwipeDistance = 50;
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -439,9 +553,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                                     className="min-h-full"
                                 >
                                     {activeTab === 'home' && renderHome()}
-                                    {activeTab === 'visit' && renderFiltered('visit_group')}
-                                    {activeTab === 'hotel' && renderFiltered('hotel')}
-                                    {activeTab === 'transport' && renderFiltered('transport')}
+                                    {activeTab === 'stay_transport' && renderFiltered('stay_transport')}
                                     {activeTab === 'tasks' && (
                                         <TasksTab tasks={tasks} isAuthenticated={isAuthenticated} />
                                     )}

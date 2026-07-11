@@ -41,11 +41,10 @@ export default function PasswordProtection() {
 
     useEffect(() => {
         if (state.success) {
-            // Force a hard reload to ensure the new cookie is recognized by the server
-            // router.refresh() sometimes has race conditions with cookie setting in middleware/layouts
-            window.location.reload();
+            router.refresh();
+            window.location.href = '/';
         }
-    }, [state.success]);
+    }, [router, state.success]);
 
     return (
         <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">

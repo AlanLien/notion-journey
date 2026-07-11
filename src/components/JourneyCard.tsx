@@ -35,7 +35,7 @@ const RESERVED_COLORS: Record<string, string> = {
 };
 
 const RESERVED_OPTIONS = ['Reserved', 'Not Yet', 'No Need'];
-const PAYER_OPTIONS = ['Lee Ruei Han', '連子勻'];
+const PAYER_OPTIONS = ['Ruei Han Lee', '連子勻'];
 
 const normalizeReservedValue = (value: string) => {
     const normalized = value.toLowerCase();

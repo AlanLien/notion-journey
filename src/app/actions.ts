@@ -25,7 +25,7 @@ export async function verifyPasswordAction(prevState: any, formData: FormData) {
             const sevenDays = 60 * 60 * 24 * 7 * 1000;
             (await cookies()).set('journey_auth', 'true', {
                 maxAge: 60 * 60 * 24 * 7,
-                expires: Date.now() + sevenDays,
+                expires: new Date(Date.now() + sevenDays),
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax',

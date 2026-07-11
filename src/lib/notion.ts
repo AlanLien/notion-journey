@@ -21,6 +21,8 @@ export interface ItineraryItem {
     type: string;
     title: string;
     category: string;
+    phase: string;
+    phaseColors: Record<string, string>;
     date: string;
     time: string;
     reserved: string;
@@ -148,6 +150,12 @@ export const getTripData = cache(async () => {
         if (property.select) {
             return property.select.name || '';
         }
+        if (property.status) {
+            return property.status.name || '';
+        }
+        if (property.multi_select) {
+            return property.multi_select.map((option: any) => option.name).filter(Boolean).join('、');
+        }
         if (property.people) {
             return property.people
                 .map((person: any) => person.name || person.person?.email || '')
@@ -169,6 +177,25 @@ export const getTripData = cache(async () => {
         }
 
         return '';
+    };
+
+    const getOptionColors = (property: any): Record<string, string> => {
+        if (!property) return {};
+
+        if (property.select) {
+            return property.select.name ? { [property.select.name]: property.select.color || 'default' } : {};
+        }
+        if (property.status) {
+            return property.status.name ? { [property.status.name]: property.status.color || 'default' } : {};
+        }
+        if (property.multi_select) {
+            return property.multi_select.reduce((colors: Record<string, string>, option: any) => {
+                if (option.name) colors[option.name] = option.color || 'default';
+                return colors;
+            }, {});
+        }
+
+        return {};
     };
 
     const getSortDate = (item: ItineraryItem) => {
@@ -265,11 +292,32 @@ export const getTripData = cache(async () => {
                 }
             }
 
+            const phaseProperty = getProperty(page.properties, [
+                '行程階段',
+                '旅遊階段',
+                '旅行階段',
+                '旅程階段',
+                '階段',
+                '區域',
+                'Travel Stage',
+                'travel stage',
+                'Trip Stage',
+                'trip stage',
+                'Travel Phase',
+                'travel phase',
+                'Phase',
+                'phase',
+                'Stage',
+                'stage',
+            ]);
+
             return {
                 id: page.id,
                 type: 'journey',
                 title: page.properties.title?.title[0]?.plain_text || '未命名項目',
                 category: category,
+                phase: getPlainText(phaseProperty),
+                phaseColors: getOptionColors(phaseProperty),
                 date: page.properties.date?.date?.start || '',
                 time: getPlainText(getProperty(page.properties, ['Time', 'time'])),
                 reserved: getProperty(page.properties, ['Reserved', 'reserved'])?.select?.name || '',
@@ -409,7 +457,7 @@ function getEditablePropertyName(properties: Record<string, any>, names: string[
 
 async function resolvePeopleProperty(notion: Client, property: any, payer: string) {
     const payerAliases: Record<string, string> = {
-        'Ruei Han Lee': 'Lee Ruei Han',
+        'Lee Ruei Han': 'Ruei Han Lee',
     };
     const names = payer
         .split(/[、,]/)
@@ -429,6 +477,7 @@ async function resolvePeopleProperty(notion: Client, property: any, payer: strin
 
     if (names.length === 0) return { people: [] };
 
+    const existingPeople = property?.people || [];
     const users: any[] = [];
     let startCursor: string | undefined;
     do {
@@ -438,12 +487,16 @@ async function resolvePeopleProperty(notion: Client, property: any, payer: strin
     } while (startCursor);
 
     const people = names.map(name => {
-        const user = users.find(u =>
+        const existingUser = existingPeople.find((u: any) =>
+            u.name?.toLowerCase() === name.toLowerCase()
+            || u.person?.email?.toLowerCase() === name.toLowerCase()
+        );
+        const user = existingUser || users.find(u =>
             u.name?.toLowerCase() === name.toLowerCase()
             || u.person?.email?.toLowerCase() === name.toLowerCase()
         );
         if (!user) {
-            throw new Error(`找不到 Notion 使用者：${name}`);
+            throw new Error(`找不到 Notion 使用者：${name}。如果這是 People 欄位，請先在 Notion 的 paid by 欄位手動選過這個人，或把 paid by 改成 Select/Multi-select 欄位。`);
         }
         return { id: user.id };
     });
