@@ -173,6 +173,57 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         }));
     };
 
+    const renderCollapsibleDateGroup = (group: { date: string, items: ItineraryItem[] }) => {
+        const isExpanded = expandedDays[group.date] !== false;
+
+        return (
+            <div
+                key={group.date}
+                className="mb-4 last:mb-0 rounded-2xl border border-white/70 bg-white/50 shadow-sm overflow-hidden"
+            >
+                <button
+                    onClick={() => toggleDay(group.date)}
+                    className="w-full px-4 py-3 flex items-center justify-between"
+                >
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center gap-2">
+                            <Calendar size={14} className="text-slate-400" />
+                            <span className="text-sm font-bold text-slate-700">
+                                {format(parseISO(group.date), 'MM/dd EEEE', { locale: zhTW })}
+                            </span>
+                        </div>
+                        <span className="hidden sm:inline text-sm font-bold text-slate-400">
+                            {group.items.length} 個行程
+                        </span>
+                    </div>
+                    <div className={cn(
+                        "p-1 rounded-full transition-transform duration-300 text-slate-400",
+                        isExpanded && "bg-blue-50 text-blue-600 rotate-180"
+                    )}>
+                        <ChevronDown size={18} />
+                    </div>
+                </button>
+
+                <AnimatePresence initial={false}>
+                    {isExpanded && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25, ease: "easeInOut" }}
+                        >
+                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-slate-100/70">
+                                {group.items.map(item => (
+                                    <JourneyCard key={item.id} item={item} isAuthenticated={isAuthenticated} />
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        );
+    };
+
     // -- Render Logic --
 
     const renderHome = () => {
@@ -360,27 +411,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                             groups.push({ date: date, items: [item] });
                         }
                         return groups;
-                    }, [] as { date: string, items: typeof filteredItems }[]).map((group) => (
-                        <div key={group.date} className="mb-8 last:mb-0">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center gap-2">
-                                    <Calendar size={14} className="text-slate-400" />
-                                    <span className="text-sm font-bold text-slate-700">
-                                        {format(parseISO(group.date), 'MM/dd EEEE', { locale: zhTW })}
-                                    </span>
-                                </div>
-                                <div className="h-px bg-slate-200/60 flex-1" />
-                            </div>
-
-                            <div className="space-y-3">
-                                {group.items.map(item => (
-                                    <div key={item.id}>
-                                        <JourneyCard item={item} isAuthenticated={isAuthenticated} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))
+                    }, [] as { date: string, items: typeof filteredItems }[]).map(renderCollapsibleDateGroup)
                 )}
             </div>
         );
@@ -421,46 +452,13 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
                             groups.push({ date, items: [item] });
                         }
                         return groups;
-                    }, [] as { date: string, items: typeof pendingReservations }[]).map((group) => (
-                        <div key={group.date} className="mb-8 last:mb-0">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-100 shadow-sm flex items-center gap-2">
-                                    <Calendar size={14} className="text-slate-400" />
-                                    <span className="text-sm font-bold text-slate-700">
-                                        {format(parseISO(group.date), 'MM/dd EEEE', { locale: zhTW })}
-                                    </span>
-                                </div>
-                                <div className="h-px bg-slate-200/60 flex-1" />
-                            </div>
-
-                            <div className="space-y-3">
-                                {group.items.map(item => (
-                                    <JourneyCard key={item.id} item={item} isAuthenticated={isAuthenticated} />
-                                ))}
-                            </div>
-                        </div>
-                    ))
+                    }, [] as { date: string, items: typeof pendingReservations }[]).map(renderCollapsibleDateGroup)
                 )}
             </div>
         );
     };
 
-    // Swipe Logic
     const TABS: TabType[] = ['home', 'stay_transport', 'tasks', 'expense', 'reservations'];
-    const minSwipeDistance = 50;
-    const [touchStart, setTouchStart] = useState<number | null>(null);
-    const [touchEnd, setTouchEnd] = useState<number | null>(null);
-    const [touchStartY, setTouchStartY] = useState<number | null>(null);
-
-    const onTouchStart = (e: React.TouchEvent) => {
-        setTouchEnd(null);
-        setTouchStart(e.targetTouches[0].clientX);
-        setTouchStartY(e.targetTouches[0].clientY);
-    };
-
-    const onTouchMove = (e: React.TouchEvent) => {
-        setTouchEnd(e.targetTouches[0].clientX);
-    };
 
     const [direction, setDirection] = useState(0);
 
@@ -488,35 +486,6 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
         setActiveTab(newTab);
     };
 
-    const onTouchEnd = (e: React.TouchEvent) => {
-        if (!touchStart || !touchEnd || !touchStartY) return;
-
-        const distance = touchStart - touchEnd;
-        const isLeftSwipe = distance > minSwipeDistance;
-        const isRightSwipe = distance < -minSwipeDistance;
-
-        const verticalDistance = Math.abs(touchStartY - e.changedTouches[0].clientY);
-        const horizontalDistance = Math.abs(distance);
-
-        if (verticalDistance > horizontalDistance) return;
-
-        if (isLeftSwipe || isRightSwipe) {
-            const currentIndex = TABS.indexOf(activeTab);
-            let nextIndex = currentIndex;
-
-            if (isLeftSwipe && currentIndex < TABS.length - 1) {
-                nextIndex = currentIndex + 1;
-            } else if (isRightSwipe && currentIndex > 0) {
-                nextIndex = currentIndex - 1;
-            }
-
-            if (nextIndex !== currentIndex) {
-                setDirection(nextIndex > currentIndex ? 1 : -1);
-                setActiveTab(TABS[nextIndex]);
-            }
-        }
-    };
-
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-blue-100 flex justify-center">
             <div className="w-full max-w-[768px] h-[100dvh] bg-[#F8FAFC] shadow-2xl relative overflow-hidden transition-colors duration-300">
@@ -532,12 +501,7 @@ export default function JourneyDashboard({ data, requiredPassword, isAuthenticat
 
                 <main className="absolute inset-0 top-[calc(env(safe-area-inset-top)+78px)] bottom-[calc(env(safe-area-inset-bottom)+64px)] overflow-hidden">
                     <PullToRefresh className="h-full">
-                        <div
-                            className="min-h-full"
-                            onTouchStart={onTouchStart}
-                            onTouchMove={onTouchMove}
-                            onTouchEnd={onTouchEnd}
-                        >
+                        <div className="min-h-full">
                             <AnimatePresence initial={false} custom={direction} mode='popLayout'>
                                 <motion.div
                                     key={activeTab}
